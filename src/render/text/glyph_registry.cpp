@@ -1,97 +1,110 @@
 #include "render/text/glyph_registry.h"
 
 #include "core/log.h"
+#include "core/resource_paths.h"
 
-#include <json.hpp>
+#include <charconv>
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
-#include <sstream>
-#include <cstdlib>
-#include <vector>
+#include <json.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <unordered_map>
 
 namespace {
-  constexpr Logger kLog("glyph-registry");
 
-  std::vector<std::string> assetDirCandidates() {
-    std::vector<std::string> dirs;
-    if (const char* env = std::getenv("NOCTALIA_GREETER_ASSETS_DIR"); env && env[0] != '\0') {
-      dirs.emplace_back(env);
-    }
-#ifdef NOCTALIA_GREETER_INSTALLED_ASSETS_DIR
-    dirs.emplace_back(NOCTALIA_GREETER_INSTALLED_ASSETS_DIR);
-    const std::string installed = NOCTALIA_GREETER_INSTALLED_ASSETS_DIR;
-    if (!installed.empty() && installed[0] != '/') {
-      dirs.emplace_back("/usr/share/" + installed);
-    }
-#endif
-    dirs.emplace_back(NOCTALIA_GREETER_ASSETS_DIR);
-    dirs.emplace_back("/usr/share/noctalia-greeter/assets");
-    return dirs;
+constexpr Logger kLog("glyph-registry");
+constexpr char32_t kMissingGlyph = 0xF292; // tabler skull
+
+[[nodiscard]] std::optional<char32_t>
+parseCodepointLiteral(std::string_view value) {
+  if (value.size() < 3) {
+    return std::nullopt;
   }
 
-  std::string getAssetsDir() {
-    for (const auto& dir : assetDirCandidates()) {
-      if (dir.empty()) continue;
-      std::ifstream probe(dir + "/fonts/tabler.json");
-      if (probe.is_open()) {
-        return dir;
-      }
-    }
-    return assetDirCandidates().empty() ? std::string{} : assetDirCandidates().front();
+  std::string_view hex;
+  if ((value[0] == 'U' || value[0] == 'u') && value[1] == '+') {
+    hex = value.substr(2);
+  } else if (value.size() > 2 && value[0] == '0' &&
+             (value[1] == 'x' || value[1] == 'X')) {
+    hex = value.substr(2);
+  } else {
+    return std::nullopt;
   }
 
-  std::string loadFile(const std::string& path) {
-    std::ifstream file(path);
-    if (!file.is_open()) return {};
-    std::stringstream ss;
-    ss << file.rdbuf();
-    return ss.str();
+  if (hex.empty()) {
+    return std::nullopt;
   }
 
-  char32_t parseUnicode(std::string_view str) {
-    if (str.size() < 3 || str[0] != 'U' || str[1] != '+') return 0;
-    std::string hex(str.substr(2));
-    unsigned long codepoint = 0;
-    std::istringstream iss(hex);
-    iss >> std::hex >> codepoint;
-    return static_cast<char32_t>(codepoint);
+  std::uint32_t codepoint = 0;
+  const auto *begin = hex.data();
+  const auto *end = begin + hex.size();
+  const auto result = std::from_chars(begin, end, codepoint, 16);
+  if (result.ec != std::errc{} || result.ptr != end || codepoint == 0 ||
+      codepoint > 0x10FFFF) {
+    return std::nullopt;
   }
+  return static_cast<char32_t>(codepoint);
 }
 
-void GlyphRegistry::initialize() {
-  loadTablerGlyphs();
-}
-
-void GlyphRegistry::loadTablerGlyphs() {
-  std::string assetsDir = getAssetsDir();
-  std::string jsonPath = assetsDir + "/fonts/tabler.json";
-  std::string content = loadFile(jsonPath);
-  if (content.empty()) {
-    kLog.warn("failed to load tabler.json from {}", jsonPath);
-    return;
+[[nodiscard]] std::unordered_map<std::string, char32_t> loadTablerIcons() {
+  std::unordered_map<std::string, char32_t> icons;
+  const std::filesystem::path path = paths::assetPath("fonts/tabler.json");
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    kLog.warn("failed to open Tabler glyph metadata: {}", path.string());
+    return icons;
   }
 
   try {
-    nlohmann::json data = nlohmann::json::parse(content);
-    auto& g = glyphs();
-    for (auto& [name, value] : data.items()) {
-      if (value.is_string()) {
-        char32_t cp = parseUnicode(value.get<std::string>());
-        if (cp != 0) {
-          g[name] = cp;
-        }
+    const auto root = nlohmann::json::parse(file);
+    if (!root.is_object()) {
+      kLog.warn("Tabler glyph metadata is not an object: {}", path.string());
+      return icons;
+    }
+
+    icons.reserve(root.size());
+    for (const auto &[name, value] : root.items()) {
+      if (!value.is_string()) {
+        continue;
+      }
+      if (auto parsed = parseCodepointLiteral(value.get<std::string>())) {
+        icons.emplace(name, *parsed);
       }
     }
-    kLog.info("loaded {} tabler glyphs", g.size());
-  } catch (const std::exception& e) {
-    kLog.error("failed to parse tabler.json: {}", e.what());
+    kLog.info("loaded {} Tabler glyph names from {}", icons.size(),
+              path.string());
+  } catch (const nlohmann::json::exception &e) {
+    kLog.warn("failed to parse Tabler glyph metadata '{}': {}", path.string(),
+              e.what());
   }
+  return icons;
 }
 
+[[nodiscard]] std::unordered_map<std::string, char32_t> &glyphs() {
+  static std::unordered_map<std::string, char32_t> s_glyphs;
+  return s_glyphs;
+}
+
+} // namespace
+
+void GlyphRegistry::initialize() { glyphs() = loadTablerIcons(); }
+
 char32_t GlyphRegistry::lookup(std::string_view name) {
-  auto& g = glyphs();
-  auto it = g.find(std::string(name));
-  if (it != g.end()) return it->second;
-  return 0xFFFD;
+  if (auto codepoint = parseCodepointLiteral(name)) {
+    return *codepoint;
+  }
+
+  const auto it = glyphs().find(std::string(name));
+  if (it != glyphs().end()) {
+    return it->second;
+  }
+
+  kLog.warn("missing glyph: {}", name);
+  return kMissingGlyph;
 }
 
 void GlyphRegistry::registerGlyph(std::string_view name, char32_t codepoint) {
@@ -99,16 +112,11 @@ void GlyphRegistry::registerGlyph(std::string_view name, char32_t codepoint) {
 }
 
 std::optional<std::string> GlyphRegistry::fontPath() {
-  const std::string path = getAssetsDir() + "/fonts/tabler.ttf";
-  std::ifstream probe(path);
-  if (!probe.is_open()) {
-    kLog.warn("tabler.ttf not found at {}", path);
+  const std::filesystem::path path = paths::assetPath("fonts/tabler.ttf");
+  std::error_code ec;
+  if (!std::filesystem::exists(path, ec)) {
+    kLog.warn("tabler.ttf not found at {}", path.string());
     return std::nullopt;
   }
-  return path;
-}
-
-std::unordered_map<std::string, char32_t>& GlyphRegistry::glyphs() {
-  static std::unordered_map<std::string, char32_t> s_glyphs;
-  return s_glyphs;
+  return path.string();
 }
