@@ -21,24 +21,18 @@ typedef struct _PangoLayout PangoLayout;
 class RenderBackend;
 class TextureManager;
 
-// Pango/Cairo-backed text renderer.
-//
-// Rasterizes a shaped PangoLayout into an ARGB32 Cairo surface, uploads it as
-// a premultiplied RGBA texture, and submits glyph quads to RenderBackend.
-// Handles Latin, CJK, Arabic, BiDi, and COLR v1 emoji via fontconfig fallback.
-//
-// measure() and truncate() do not require a current render context.
-// draw() needs the render backend context current (creates/binds textures).
+// Pango/Cairo text rasterization and draw via RenderBackend.
+// measure() has no GL context; draw() needs the backend current.
 class CairoTextRenderer {
 public:
   struct TextMetrics {
     float width = 0.0f;
     float left = 0.0f;
     float right = 0.0f;
-    float top = 0.0f;       // negative — above baseline
-    float bottom = 0.0f;    // positive — below baseline
-    float inkTop = 0.0f;    // negative — visible ink above baseline
-    float inkBottom = 0.0f; // positive — visible ink below baseline
+    float top = 0.0f;       // negative, above baseline
+    float bottom = 0.0f;    // positive, below baseline
+    float inkTop = 0.0f;    // negative, visible ink above baseline
+    float inkBottom = 0.0f; // positive, visible ink below baseline
     float inkLeft = 0.0f;   // visible ink left edge relative to layout origin
     float inkRight = 0.0f;  // visible ink right edge relative to layout origin
   };
@@ -46,10 +40,10 @@ public:
   CairoTextRenderer();
   ~CairoTextRenderer();
 
-  CairoTextRenderer(const CairoTextRenderer&) = delete;
-  CairoTextRenderer& operator=(const CairoTextRenderer&) = delete;
+  CairoTextRenderer(const CairoTextRenderer &) = delete;
+  CairoTextRenderer &operator=(const CairoTextRenderer &) = delete;
 
-  void initialize(RenderBackend* backend, TextureManager* textures);
+  void initialize(RenderBackend *backend, TextureManager *textures);
   void cleanup();
 
   // HiDPI: raster at `scale × fontSize` pixels and shrink the quad by 1/scale.
@@ -57,16 +51,22 @@ public:
   void setFontFamily(std::string family);
   void notifyFontConfigChanged();
 
-  [[nodiscard]] TextMetrics measure(std::string_view text, float fontSize, bool bold = false, float maxWidth = 0.0f,
-                                    int maxLines = 0, TextAlign align = TextAlign::Start,
+  [[nodiscard]] TextMetrics measure(std::string_view text, float fontSize,
+                                    bool bold = false, float maxWidth = 0.0f,
+                                    int maxLines = 0,
+                                    TextAlign align = TextAlign::Start,
                                     std::string_view fontFamily = {});
-  [[nodiscard]] TextMetrics measureFont(float fontSize, bool bold = false) const;
-  void measureCursorStops(std::string_view text, float fontSize, const std::vector<std::size_t>& byteOffsets,
-                          std::vector<float>& outStops, bool bold = false);
+  [[nodiscard]] TextMetrics measureFont(float fontSize,
+                                        bool bold = false) const;
+  void measureCursorStops(std::string_view text, float fontSize,
+                          const std::vector<std::size_t> &byteOffsets,
+                          std::vector<float> &outStops, bool bold = false);
 
-  void draw(float surfaceWidth, float surfaceHeight, float x, float baselineY, std::string_view text, float fontSize,
-            const Color& color, const Mat3& transform, bool bold = false, float maxWidth = 0.0f, int maxLines = 0,
-            TextAlign align = TextAlign::Start, std::string_view fontFamily = {});
+  void draw(float surfaceWidth, float surfaceHeight, float x, float baselineY,
+            std::string_view text, float fontSize, const Color &color,
+            const Mat3 &transform, bool bold = false, float maxWidth = 0.0f,
+            int maxLines = 0, TextAlign align = TextAlign::Start,
+            std::string_view fontFamily = {});
 
 private:
   struct CacheKey {
@@ -76,19 +76,18 @@ private:
     std::uint32_t colorRgba = 0; // packed r<<24|g<<16|b<<8|a
     std::uint32_t maxWidthQ = 0; // maxWidth * 64 + 0.5, 0 = no limit
     std::uint16_t scaleQ = 0;    // contentScale * 64 + 0.5
-    std::uint16_t maxLines = 0;  // 0 = no explicit limit (use '\n'-count fallback)
+    std::uint16_t maxLines =
+        0; // 0 = no explicit limit (use '\n'-count fallback)
     TextAlign align = TextAlign::Start;
     bool bold = false;
 
-    bool operator==(const CacheKey& other) const noexcept;
+    bool operator==(const CacheKey &other) const noexcept;
   };
   struct CacheKeyHash {
-    std::size_t operator()(const CacheKey& k) const noexcept;
+    std::size_t operator()(const CacheKey &k) const noexcept;
   };
 
-  // Color-independent key used to cache logical TextMetrics. measure() is
-  // called from layout paths that run every frame on dirty surfaces; rebuilding
-  // a PangoLayout for each call was the top allocation hot-spot in heaptrack.
+  // Color-independent metrics cache (layout calls measure every frame).
   struct MetricsKey {
     std::string text;
     std::string fontFamily;
@@ -99,22 +98,16 @@ private:
     TextAlign align = TextAlign::Start;
     bool bold = false;
 
-    bool operator==(const MetricsKey& other) const noexcept;
+    bool operator==(const MetricsKey &other) const noexcept;
   };
   struct MetricsKeyHash {
-    std::size_t operator()(const MetricsKey& k) const noexcept;
+    std::size_t operator()(const MetricsKey &k) const noexcept;
   };
 
-  // LruList is a list of pointers into map keys — we break the otherwise
-  // circular type dependency (CacheEntry ↔ CacheMap) this way. CacheKey* is
-  // stable because unordered_map never moves key-value nodes under insert
-  // (we also reserve bucket capacity upfront to avoid rehashing).
-  using LruList = std::list<const CacheKey*>;
+  // LRU holds stable pointers into unordered_map keys.
+  using LruList = std::list<const CacheKey *>;
 
-  // A very tall text block can exceed the backend texture limit (typically
-  // 4096 or 8192). We slice the Pango layout into N vertically-stacked tiles,
-  // each its own texture sized within that limit. draw() emits one quad per tile;
-  // tiles abut on exact buffer-pixel boundaries so there is no visible seam.
+  // Tall text is split into stacked tiles within the GL texture size limit.
   struct Tile {
     TextureHandle texture;
     int pixelHeight = 0;  // raster pixels
@@ -125,31 +118,34 @@ private:
     std::vector<Tile> tiles;
     int pixelWidth = 0;   // total raster surface pixel width
     int pixelHeight = 0;  // total raster surface pixel height (sum of tiles)
-    float baselinePx = 0;  // baseline from top of full layout, in raster pixels
+    float baselinePx = 0; // baseline from top of full layout, in raster pixels
     float inkOffsetX = 0; // raster px from surface left to logical text origin
-    TextMetrics metrics;   // logical metrics in logical (unscaled) pixels
+    TextMetrics metrics;  // logical metrics in logical (unscaled) pixels
     std::size_t bytes = 0;
-    bool tinted = false; // true: alpha coverage, tint in shader; false: premul RGBA
+    bool tinted =
+        false; // true: alpha coverage, tint in shader; false: premul RGBA
     LruList::iterator lruIt;
   };
 
   using CacheMap = std::unordered_map<CacheKey, CacheEntry, CacheKeyHash>;
-  using MetricsMap = std::unordered_map<MetricsKey, TextMetrics, MetricsKeyHash>;
+  using MetricsMap =
+      std::unordered_map<MetricsKey, TextMetrics, MetricsKeyHash>;
 
-  // Build a PangoLayout at the given scaled size. Caller owns the layout (g_object_unref).
-  PangoLayout* buildLayout(std::string_view text, float fontSize, bool bold, float maxWidthPxScaled, int maxLines,
-                           TextAlign align, std::string_view fontFamily = {}) const;
-  // Render a layout into a new GL texture; fills out fields of `entry`.
-  // When `tinted` is true, rasterizes as CAIRO_FORMAT_A8 and uploads alpha
-  // coverage so the color is applied via u_tint at draw time. When false,
-  // rasterizes as CAIRO_FORMAT_ARGB32 with `color` baked in (for COLR emoji
-  // content).
-  void rasterizeLayout(PangoLayout* layout, const Color& color, bool tinted, CacheEntry& entry);
-  // Extract logical metrics from a laid-out PangoLayout, dividing by PANGO_SCALE and by scale.
-  TextMetrics metricsFromLayout(PangoLayout* layout) const;
+  // Caller owns the returned layout (g_object_unref).
+  PangoLayout *buildLayout(std::string_view text, float fontSize, bool bold,
+                           float maxWidthPxScaled, int maxLines,
+                           TextAlign align,
+                           std::string_view fontFamily = {}) const;
+  // tinted: A8 coverage for shader tint; else ARGB32 with color baked in.
+  void rasterizeLayout(PangoLayout *layout, const Color &color, bool tinted,
+                       CacheEntry &entry);
+  // Logical metrics from a laid-out PangoLayout.
+  TextMetrics metricsFromLayout(PangoLayout *layout) const;
 
-  CacheEntry* lookupOrRasterize(std::string_view text, float fontSize, bool bold, float maxWidth, int maxLines,
-                                TextAlign align, const Color& color, std::string_view fontFamily = {});
+  CacheEntry *lookupOrRasterize(std::string_view text, float fontSize,
+                                bool bold, float maxWidth, int maxLines,
+                                TextAlign align, const Color &color,
+                                std::string_view fontFamily = {});
   void touch(CacheMap::iterator it);
   void evict(CacheMap::iterator it);
   void evictIfNeeded();
@@ -159,10 +155,10 @@ private:
   bool m_fontConfigInitialized = false;
   std::string m_fontFamily = "sans-serif";
 
-  PangoFontMap* m_fontMap = nullptr;      // owned
-  PangoContext* m_pangoContext = nullptr; // owned
-  RenderBackend* m_backend = nullptr;
-  TextureManager* m_textureManager = nullptr;
+  PangoFontMap *m_fontMap = nullptr;      // owned
+  PangoContext *m_pangoContext = nullptr; // owned
+  RenderBackend *m_backend = nullptr;
+  TextureManager *m_textureManager = nullptr;
 
   CacheMap m_cache;
   LruList m_lru;

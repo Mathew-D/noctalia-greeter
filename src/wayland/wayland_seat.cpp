@@ -15,55 +15,61 @@
 
 namespace {
 
-  const wl_keyboard_listener kKeyboardListener = {
-      .keymap = &WaylandSeat::handleKeyboardKeymap,
-      .enter = &WaylandSeat::handleKeyboardEnter,
-      .leave = &WaylandSeat::handleKeyboardLeave,
-      .key = &WaylandSeat::handleKeyboardKey,
-      .modifiers = &WaylandSeat::handleKeyboardModifiers,
-      .repeat_info = &WaylandSeat::handleKeyboardRepeatInfo,
-  };
+const wl_keyboard_listener kKeyboardListener = {
+    .keymap = &WaylandSeat::handleKeyboardKeymap,
+    .enter = &WaylandSeat::handleKeyboardEnter,
+    .leave = &WaylandSeat::handleKeyboardLeave,
+    .key = &WaylandSeat::handleKeyboardKey,
+    .modifiers = &WaylandSeat::handleKeyboardModifiers,
+    .repeat_info = &WaylandSeat::handleKeyboardRepeatInfo,
+};
 
-  const wl_seat_listener kSeatListener = {
-      .capabilities = &WaylandSeat::handleSeatCapabilities,
-      .name = &WaylandSeat::handleSeatName,
-  };
+const wl_seat_listener kSeatListener = {
+    .capabilities = &WaylandSeat::handleSeatCapabilities,
+    .name = &WaylandSeat::handleSeatName,
+};
 
-  const wl_pointer_listener kPointerListener = {
-      .enter = &WaylandSeat::handlePointerEnter,
-      .leave = &WaylandSeat::handlePointerLeave,
-      .motion = &WaylandSeat::handlePointerMotion,
-      .button = &WaylandSeat::handlePointerButton,
-      .axis = &WaylandSeat::handlePointerAxis,
-      .frame = &WaylandSeat::handlePointerFrame,
-      .axis_source = &WaylandSeat::handlePointerAxisSource,
-      .axis_stop = [](void*, wl_pointer*, std::uint32_t, std::uint32_t) {},
-      .axis_discrete = &WaylandSeat::handlePointerAxisDiscrete,
-      .axis_value120 = &WaylandSeat::handlePointerAxisValue120,
-      .axis_relative_direction = [](void*, wl_pointer*, std::uint32_t, std::uint32_t) {},
-  };
+const wl_pointer_listener kPointerListener = {
+    .enter = &WaylandSeat::handlePointerEnter,
+    .leave = &WaylandSeat::handlePointerLeave,
+    .motion = &WaylandSeat::handlePointerMotion,
+    .button = &WaylandSeat::handlePointerButton,
+    .axis = &WaylandSeat::handlePointerAxis,
+    .frame = &WaylandSeat::handlePointerFrame,
+    .axis_source = &WaylandSeat::handlePointerAxisSource,
+    .axis_stop = [](void *, wl_pointer *, std::uint32_t, std::uint32_t) {},
+    .axis_discrete = &WaylandSeat::handlePointerAxisDiscrete,
+    .axis_value120 = &WaylandSeat::handlePointerAxisValue120,
+    .axis_relative_direction = [](void *, wl_pointer *, std::uint32_t,
+                                  std::uint32_t) {},
+};
 
-  constexpr Logger kLog("seat");
-  constexpr float kAxisValue120PerStep = 120.0f;
-  constexpr float kLegacyWheelAxisUnitsPerStep = 10.0f;
+constexpr Logger kLog("seat");
+constexpr float kAxisValue120PerStep = 120.0f;
+constexpr float kLegacyWheelAxisUnitsPerStep = 10.0f;
 
 } // namespace
 
-void WaylandSeat::bind(wl_seat* seat) {
+void WaylandSeat::bind(wl_seat *seat) {
   m_seat = seat;
   m_lastUserActivitySteady = SteadyClock::now();
   wl_seat_add_listener(seat, &kSeatListener, this);
 }
 
-void WaylandSeat::bumpUserActivity() noexcept { m_lastUserActivitySteady = SteadyClock::now(); }
+void WaylandSeat::bumpUserActivity() noexcept {
+  m_lastUserActivitySteady = SteadyClock::now();
+}
 
 double WaylandSeat::userIdleSeconds() const noexcept {
   const auto now = SteadyClock::now();
-  const auto dur = std::chrono::duration<double>(now - m_lastUserActivitySteady);
+  const auto dur =
+      std::chrono::duration<double>(now - m_lastUserActivitySteady);
   return std::max(0.0, dur.count());
 }
 
-void WaylandSeat::setCursorShapeManager(wp_cursor_shape_manager_v1* manager) { m_cursorShapeManager = manager; }
+void WaylandSeat::setCursorShapeManager(wp_cursor_shape_manager_v1 *manager) {
+  m_cursorShapeManager = manager;
+}
 
 void WaylandSeat::setPointerEventCallback(PointerEventCallback callback) {
   m_pointerEventCallback = std::move(callback);
@@ -80,7 +86,7 @@ void WaylandSeat::setCursorShape(std::uint32_t serial, std::uint32_t shape) {
   wp_cursor_shape_device_v1_set_shape(m_cursorShapeDevice, serial, shape);
 }
 
-void WaylandSeat::forgetSurface(wl_surface* surface) noexcept {
+void WaylandSeat::forgetSurface(wl_surface *surface) noexcept {
   if (surface == nullptr) {
     return;
   }
@@ -92,7 +98,9 @@ void WaylandSeat::forgetSurface(wl_surface* surface) noexcept {
     m_lastKeyboardSurface = nullptr;
     m_repeatActive = false;
   }
-  std::erase_if(m_pendingPointerEvents, [surface](const PointerEvent& event) { return event.surface == surface; });
+  std::erase_if(m_pendingPointerEvents, [surface](const PointerEvent &event) {
+    return event.surface == surface;
+  });
 }
 
 void WaylandSeat::cleanup() {
@@ -133,8 +141,9 @@ void WaylandSeat::cleanup() {
   m_repeatActive = false;
 }
 
-void WaylandSeat::handleSeatCapabilities(void* data, wl_seat* seat, std::uint32_t caps) {
-  auto* self = static_cast<WaylandSeat*>(data);
+void WaylandSeat::handleSeatCapabilities(void *data, wl_seat *seat,
+                                         std::uint32_t caps) {
+  auto *self = static_cast<WaylandSeat *>(data);
 
   const bool hasKeyboard = (caps & WL_SEAT_CAPABILITY_KEYBOARD) != 0;
 
@@ -159,7 +168,8 @@ void WaylandSeat::handleSeatCapabilities(void* data, wl_seat* seat, std::uint32_
     kLog.info("pointer: bound");
 
     if (self->m_cursorShapeManager != nullptr) {
-      self->m_cursorShapeDevice = wp_cursor_shape_manager_v1_get_pointer(self->m_cursorShapeManager, self->m_pointer);
+      self->m_cursorShapeDevice = wp_cursor_shape_manager_v1_get_pointer(
+          self->m_cursorShapeManager, self->m_pointer);
       kLog.info("pointer: cursor-shape-v1 available");
     }
   } else if (!hasPointer && self->m_pointer != nullptr) {
@@ -173,11 +183,13 @@ void WaylandSeat::handleSeatCapabilities(void* data, wl_seat* seat, std::uint32_
   }
 }
 
-void WaylandSeat::handleSeatName(void* /*data*/, wl_seat* /*seat*/, const char* /*name*/) {}
+void WaylandSeat::handleSeatName(void * /*data*/, wl_seat * /*seat*/,
+                                 const char * /*name*/) {}
 
-void WaylandSeat::handlePointerEnter(void* data, wl_pointer* /*pointer*/, std::uint32_t serial, wl_surface* surface,
+void WaylandSeat::handlePointerEnter(void *data, wl_pointer * /*pointer*/,
+                                     std::uint32_t serial, wl_surface *surface,
                                      std::int32_t sx, std::int32_t sy) {
-  auto* self = static_cast<WaylandSeat*>(data);
+  auto *self = static_cast<WaylandSeat *>(data);
   self->m_lastSerial = serial;
   self->m_lastInputSource = InputSource::Pointer;
   self->m_lastPointerSurface = surface;
@@ -193,8 +205,10 @@ void WaylandSeat::handlePointerEnter(void* data, wl_pointer* /*pointer*/, std::u
   });
 }
 
-void WaylandSeat::handlePointerLeave(void* data, wl_pointer* /*pointer*/, std::uint32_t serial, wl_surface* surface) {
-  auto* self = static_cast<WaylandSeat*>(data);
+void WaylandSeat::handlePointerLeave(void *data, wl_pointer * /*pointer*/,
+                                     std::uint32_t serial,
+                                     wl_surface *surface) {
+  auto *self = static_cast<WaylandSeat *>(data);
   self->m_lastSerial = serial;
   self->m_lastInputSource = InputSource::Pointer;
   self->m_lastPointerSurface = surface;
@@ -206,9 +220,10 @@ void WaylandSeat::handlePointerLeave(void* data, wl_pointer* /*pointer*/, std::u
   });
 }
 
-void WaylandSeat::handlePointerMotion(void* data, wl_pointer* /*pointer*/, std::uint32_t time, std::int32_t sx,
+void WaylandSeat::handlePointerMotion(void *data, wl_pointer * /*pointer*/,
+                                      std::uint32_t time, std::int32_t sx,
                                       std::int32_t sy) {
-  auto* self = static_cast<WaylandSeat*>(data);
+  auto *self = static_cast<WaylandSeat *>(data);
   self->m_lastPointerX = wl_fixed_to_double(sx);
   self->m_lastPointerY = wl_fixed_to_double(sy);
   self->m_hasPointerPosition = true;
@@ -220,9 +235,11 @@ void WaylandSeat::handlePointerMotion(void* data, wl_pointer* /*pointer*/, std::
   });
 }
 
-void WaylandSeat::handlePointerButton(void* data, wl_pointer* /*pointer*/, std::uint32_t serial, std::uint32_t time,
-                                      std::uint32_t button, std::uint32_t state) {
-  auto* self = static_cast<WaylandSeat*>(data);
+void WaylandSeat::handlePointerButton(void *data, wl_pointer * /*pointer*/,
+                                      std::uint32_t serial, std::uint32_t time,
+                                      std::uint32_t button,
+                                      std::uint32_t state) {
+  auto *self = static_cast<WaylandSeat *>(data);
   self->m_lastSerial = serial;
   self->m_lastInputSource = InputSource::Pointer;
   self->m_pendingPointerEvents.push_back(PointerEvent{
@@ -237,9 +254,10 @@ void WaylandSeat::handlePointerButton(void* data, wl_pointer* /*pointer*/, std::
   });
 }
 
-void WaylandSeat::handlePointerAxis(void* data, wl_pointer* /*pointer*/, std::uint32_t time, std::uint32_t axis,
+void WaylandSeat::handlePointerAxis(void *data, wl_pointer * /*pointer*/,
+                                    std::uint32_t time, std::uint32_t axis,
                                     std::int32_t value) {
-  auto* self = static_cast<WaylandSeat*>(data);
+  auto *self = static_cast<WaylandSeat *>(data);
   self->m_pendingPointerEvents.push_back(PointerEvent{
       .type = PointerEvent::Type::Axis,
       .surface = self->m_lastPointerSurface,
@@ -252,15 +270,19 @@ void WaylandSeat::handlePointerAxis(void* data, wl_pointer* /*pointer*/, std::ui
   });
 }
 
-void WaylandSeat::handlePointerAxisSource(void* data, wl_pointer* /*pointer*/, std::uint32_t axisSource) {
-  auto* self = static_cast<WaylandSeat*>(data);
+void WaylandSeat::handlePointerAxisSource(void *data, wl_pointer * /*pointer*/,
+                                          std::uint32_t axisSource) {
+  auto *self = static_cast<WaylandSeat *>(data);
   self->m_pendingAxisSource = axisSource;
 }
 
-void WaylandSeat::handlePointerAxisDiscrete(void* data, wl_pointer* /*pointer*/, std::uint32_t axis,
+void WaylandSeat::handlePointerAxisDiscrete(void *data,
+                                            wl_pointer * /*pointer*/,
+                                            std::uint32_t axis,
                                             std::int32_t discrete) {
-  auto* self = static_cast<WaylandSeat*>(data);
-  for (auto it = self->m_pendingPointerEvents.rbegin(); it != self->m_pendingPointerEvents.rend(); ++it) {
+  auto *self = static_cast<WaylandSeat *>(data);
+  for (auto it = self->m_pendingPointerEvents.rbegin();
+       it != self->m_pendingPointerEvents.rend(); ++it) {
     if (it->type == PointerEvent::Type::Axis && it->axis == axis) {
       it->axisDiscrete = discrete;
       if (it->axisLines == 0.0f) {
@@ -271,10 +293,13 @@ void WaylandSeat::handlePointerAxisDiscrete(void* data, wl_pointer* /*pointer*/,
   }
 }
 
-void WaylandSeat::handlePointerAxisValue120(void* data, wl_pointer* /*pointer*/, std::uint32_t axis,
+void WaylandSeat::handlePointerAxisValue120(void *data,
+                                            wl_pointer * /*pointer*/,
+                                            std::uint32_t axis,
                                             std::int32_t value120) {
-  auto* self = static_cast<WaylandSeat*>(data);
-  for (auto it = self->m_pendingPointerEvents.rbegin(); it != self->m_pendingPointerEvents.rend(); ++it) {
+  auto *self = static_cast<WaylandSeat *>(data);
+  for (auto it = self->m_pendingPointerEvents.rbegin();
+       it != self->m_pendingPointerEvents.rend(); ++it) {
     if (it->type == PointerEvent::Type::Axis && it->axis == axis) {
       it->axisValue120 = value120;
       it->axisLines = static_cast<float>(value120) / kAxisValue120PerStep;
@@ -283,16 +308,19 @@ void WaylandSeat::handlePointerAxisValue120(void* data, wl_pointer* /*pointer*/,
   }
 }
 
-void WaylandSeat::handlePointerFrame(void* data, wl_pointer* /*pointer*/) {
-  auto* self = static_cast<WaylandSeat*>(data);
+void WaylandSeat::handlePointerFrame(void *data, wl_pointer * /*pointer*/) {
+  auto *self = static_cast<WaylandSeat *>(data);
   if (self->m_pointerEventCallback) {
-    for (auto& event : self->m_pendingPointerEvents) {
+    for (auto &event : self->m_pendingPointerEvents) {
       if (event.type == PointerEvent::Type::Axis && event.axisLines == 0.0f &&
-          (event.axisSource == WL_POINTER_AXIS_SOURCE_WHEEL || event.axisSource == WL_POINTER_AXIS_SOURCE_WHEEL_TILT) &&
+          (event.axisSource == WL_POINTER_AXIS_SOURCE_WHEEL ||
+           event.axisSource == WL_POINTER_AXIS_SOURCE_WHEEL_TILT) &&
           event.axisValue != 0.0) {
-        // Some compositors send wheel-source axis events without discrete/value120.
-        // Normalize those legacy wheel deltas into logical wheel steps centrally.
-        event.axisLines = static_cast<float>(event.axisValue / kLegacyWheelAxisUnitsPerStep);
+        // Some compositors send wheel-source axis events without
+        // discrete/value120. Normalize those legacy wheel deltas into logical
+        // wheel steps centrally.
+        event.axisLines =
+            static_cast<float>(event.axisValue / kLegacyWheelAxisUnitsPerStep);
       }
 
       switch (event.type) {
@@ -313,24 +341,26 @@ void WaylandSeat::handlePointerFrame(void* data, wl_pointer* /*pointer*/) {
   self->m_pendingAxisSource = 0;
 }
 
-void WaylandSeat::handleKeyboardKeymap(void* data, wl_keyboard* /*keyboard*/, std::uint32_t format, int fd,
+void WaylandSeat::handleKeyboardKeymap(void *data, wl_keyboard * /*keyboard*/,
+                                       std::uint32_t format, int fd,
                                        std::uint32_t size) {
-  auto* self = static_cast<WaylandSeat*>(data);
+  auto *self = static_cast<WaylandSeat *>(data);
 
   if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
     close(fd);
     return;
   }
 
-  void* buf = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
+  void *buf = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
   close(fd);
   if (buf == MAP_FAILED) {
     kLog.warn("keyboard: failed to mmap keymap");
     return;
   }
 
-  auto* keymap = xkb_keymap_new_from_string(self->m_xkbContext, static_cast<const char*>(buf),
-                                            XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
+  auto *keymap = xkb_keymap_new_from_string(
+      self->m_xkbContext, static_cast<const char *>(buf),
+      XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
   munmap(buf, size);
 
   if (keymap == nullptr) {
@@ -338,7 +368,7 @@ void WaylandSeat::handleKeyboardKeymap(void* data, wl_keyboard* /*keyboard*/, st
     return;
   }
 
-  auto* state = xkb_state_new(keymap);
+  auto *state = xkb_state_new(keymap);
   if (state == nullptr) {
     xkb_keymap_unref(keymap);
     kLog.warn("keyboard: failed to create xkb state");
@@ -363,75 +393,92 @@ void WaylandSeat::handleKeyboardKeymap(void* data, wl_keyboard* /*keyboard*/, st
     xkb_compose_table_unref(self->m_composeTable);
     self->m_composeTable = nullptr;
   }
-  self->m_composeTable =
-      xkb_compose_table_new_from_locale(self->m_xkbContext, setlocale(LC_CTYPE, nullptr), XKB_COMPOSE_COMPILE_NO_FLAGS);
+  self->m_composeTable = xkb_compose_table_new_from_locale(
+      self->m_xkbContext, setlocale(LC_CTYPE, nullptr),
+      XKB_COMPOSE_COMPILE_NO_FLAGS);
   if (self->m_composeTable != nullptr) {
-    self->m_composeState = xkb_compose_state_new(self->m_composeTable, XKB_COMPOSE_STATE_NO_FLAGS);
+    self->m_composeState =
+        xkb_compose_state_new(self->m_composeTable, XKB_COMPOSE_STATE_NO_FLAGS);
   }
 
   kLog.info("keyboard: keymap loaded");
 }
 
-void WaylandSeat::handleKeyboardEnter(void* data, wl_keyboard* /*keyboard*/, std::uint32_t /*serial*/,
-                                      wl_surface* surface, wl_array* /*keys*/) {
-  auto* self = static_cast<WaylandSeat*>(data);
+void WaylandSeat::handleKeyboardEnter(void *data, wl_keyboard * /*keyboard*/,
+                                      std::uint32_t /*serial*/,
+                                      wl_surface *surface,
+                                      wl_array * /*keys*/) {
+  auto *self = static_cast<WaylandSeat *>(data);
   self->m_repeatActive = false;
   self->m_lastKeyboardSurface = surface;
 }
 
-void WaylandSeat::handleKeyboardLeave(void* data, wl_keyboard* /*keyboard*/, std::uint32_t /*serial*/,
-                                      wl_surface* surface) {
-  auto* self = static_cast<WaylandSeat*>(data);
+void WaylandSeat::handleKeyboardLeave(void *data, wl_keyboard * /*keyboard*/,
+                                      std::uint32_t /*serial*/,
+                                      wl_surface *surface) {
+  auto *self = static_cast<WaylandSeat *>(data);
   self->m_repeatActive = false;
   if (self->m_lastKeyboardSurface == surface) {
     self->m_lastKeyboardSurface = nullptr;
   }
 }
 
-void WaylandSeat::handleKeyboardKey(void* data, wl_keyboard* /*keyboard*/, std::uint32_t serial, std::uint32_t /*time*/,
-                                    std::uint32_t key, std::uint32_t state) {
-  auto* self = static_cast<WaylandSeat*>(data);
+void WaylandSeat::handleKeyboardKey(void *data, wl_keyboard * /*keyboard*/,
+                                    std::uint32_t serial,
+                                    std::uint32_t /*time*/, std::uint32_t key,
+                                    std::uint32_t state) {
+  auto *self = static_cast<WaylandSeat *>(data);
   self->m_lastSerial = serial;
   self->m_lastInputSource = InputSource::Keyboard;
   if (self->m_xkbState == nullptr || !self->m_keyboardEventCallback) {
     return;
   }
 
-  const std::uint32_t xkbKeycode = key + 8; // evdev → XKB
-  auto sym = static_cast<std::uint32_t>(xkb_state_key_get_one_sym(self->m_xkbState, xkbKeycode));
-  auto utf32 = static_cast<std::uint32_t>(xkb_state_key_get_utf32(self->m_xkbState, xkbKeycode));
+  const std::uint32_t xkbKeycode = key + 8; // evdev -> XKB
+  auto sym = static_cast<std::uint32_t>(
+      xkb_state_key_get_one_sym(self->m_xkbState, xkbKeycode));
+  auto utf32 = static_cast<std::uint32_t>(
+      xkb_state_key_get_utf32(self->m_xkbState, xkbKeycode));
 
   std::uint32_t mods = 0;
-  if (xkb_state_mod_name_is_active(self->m_xkbState, XKB_MOD_NAME_SHIFT, XKB_STATE_MODS_EFFECTIVE) > 0)
+  if (xkb_state_mod_name_is_active(self->m_xkbState, XKB_MOD_NAME_SHIFT,
+                                   XKB_STATE_MODS_EFFECTIVE) > 0)
     mods |= KeyMod::Shift;
-  if (xkb_state_mod_name_is_active(self->m_xkbState, XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0)
+  if (xkb_state_mod_name_is_active(self->m_xkbState, XKB_MOD_NAME_CTRL,
+                                   XKB_STATE_MODS_EFFECTIVE) > 0)
     mods |= KeyMod::Ctrl;
-  if (xkb_state_mod_name_is_active(self->m_xkbState, XKB_MOD_NAME_ALT, XKB_STATE_MODS_EFFECTIVE) > 0)
+  if (xkb_state_mod_name_is_active(self->m_xkbState, XKB_MOD_NAME_ALT,
+                                   XKB_STATE_MODS_EFFECTIVE) > 0)
     mods |= KeyMod::Alt;
-  if (xkb_state_mod_name_is_active(self->m_xkbState, XKB_MOD_NAME_LOGO, XKB_STATE_MODS_EFFECTIVE) > 0)
+  if (xkb_state_mod_name_is_active(self->m_xkbState, XKB_MOD_NAME_LOGO,
+                                   XKB_STATE_MODS_EFFECTIVE) > 0)
     mods |= KeyMod::Super;
 
   const bool pressed = (state == WL_KEYBOARD_KEY_STATE_PRESSED);
 
   // Feed through compose state for dead key / intl layout support
   if (pressed && self->m_composeState != nullptr) {
-    xkb_compose_state_feed(self->m_composeState, static_cast<xkb_keysym_t>(sym));
+    xkb_compose_state_feed(self->m_composeState,
+                           static_cast<xkb_keysym_t>(sym));
     const auto status = xkb_compose_state_get_status(self->m_composeState);
     if (status == XKB_COMPOSE_COMPOSED) {
-      sym = static_cast<std::uint32_t>(xkb_compose_state_get_one_sym(self->m_composeState));
-      utf32 = static_cast<std::uint32_t>(xkb_keysym_to_utf32(static_cast<xkb_keysym_t>(sym)));
+      sym = static_cast<std::uint32_t>(
+          xkb_compose_state_get_one_sym(self->m_composeState));
+      utf32 = static_cast<std::uint32_t>(
+          xkb_keysym_to_utf32(static_cast<xkb_keysym_t>(sym)));
       xkb_compose_state_reset(self->m_composeState);
     } else if (status == XKB_COMPOSE_COMPOSING) {
-      // Send dead key visual as preedit preview.
-      // xkb_keysym_to_utf32 returns 0 for dead key syms, so get the keysym name,
-      // strip the "dead_" prefix, and look up the base (spacing) keysym instead.
-      utf32 = static_cast<std::uint32_t>(xkb_keysym_to_utf32(static_cast<xkb_keysym_t>(sym)));
+      // Dead-key preedit: map dead_* keysym name to the spacing keysym.
+      utf32 = static_cast<std::uint32_t>(
+          xkb_keysym_to_utf32(static_cast<xkb_keysym_t>(sym)));
       if (utf32 == 0) {
         char symName[64];
-        if (xkb_keysym_get_name(static_cast<xkb_keysym_t>(sym), symName, sizeof(symName)) > 0) {
+        if (xkb_keysym_get_name(static_cast<xkb_keysym_t>(sym), symName,
+                                sizeof(symName)) > 0) {
           constexpr const char kDeadPrefix[] = "dead_";
           if (std::strncmp(symName, kDeadPrefix, 5) == 0) {
-            const xkb_keysym_t baseSym = xkb_keysym_from_name(symName + 5, XKB_KEYSYM_NO_FLAGS);
+            const xkb_keysym_t baseSym =
+                xkb_keysym_from_name(symName + 5, XKB_KEYSYM_NO_FLAGS);
             if (baseSym != XKB_KEY_NoSymbol) {
               utf32 = static_cast<std::uint32_t>(xkb_keysym_to_utf32(baseSym));
             }
@@ -453,17 +500,20 @@ void WaylandSeat::handleKeyboardKey(void* data, wl_keyboard* /*keyboard*/, std::
     } else if (status == XKB_COMPOSE_CANCELLED) {
       xkb_compose_state_reset(self->m_composeState);
     }
-    // XKB_COMPOSE_NOTHING → pass through normally
+    // XKB_COMPOSE_NOTHING -> pass through normally
   }
 
-  // Set up repeat state BEFORE dispatching, so the callback can authoritatively
-  // cancel it via stopKeyRepeat() if the key press causes a state transition
-  // (e.g. lockscreen unlock) that makes the held key irrelevant.
+  // Arm repeat before dispatch so stopKeyRepeat() can cancel on state change.
   if (pressed && self->m_repeatRate > 0) {
-    self->m_repeatKey = KeyboardEvent{.sym = sym, .utf32 = utf32, .key = key, .modifiers = mods, .pressed = true};
+    self->m_repeatKey = KeyboardEvent{.sym = sym,
+                                      .utf32 = utf32,
+                                      .key = key,
+                                      .modifiers = mods,
+                                      .pressed = true};
     self->m_repeatActive = true;
     self->m_repeatInDelay = true;
-    self->m_repeatNextFire = SteadyClock::now() + std::chrono::milliseconds(self->m_repeatDelayMs);
+    self->m_repeatNextFire =
+        SteadyClock::now() + std::chrono::milliseconds(self->m_repeatDelayMs);
   } else if (!pressed && self->m_repeatKey.key == key) {
     self->m_repeatActive = false;
   }
@@ -478,18 +528,22 @@ void WaylandSeat::handleKeyboardKey(void* data, wl_keyboard* /*keyboard*/, std::
   });
 }
 
-void WaylandSeat::handleKeyboardModifiers(void* data, wl_keyboard* /*keyboard*/, std::uint32_t /*serial*/,
-                                          std::uint32_t modsDepressed, std::uint32_t modsLatched,
-                                          std::uint32_t modsLocked, std::uint32_t group) {
-  auto* self = static_cast<WaylandSeat*>(data);
+void WaylandSeat::handleKeyboardModifiers(
+    void *data, wl_keyboard * /*keyboard*/, std::uint32_t /*serial*/,
+    std::uint32_t modsDepressed, std::uint32_t modsLatched,
+    std::uint32_t modsLocked, std::uint32_t group) {
+  auto *self = static_cast<WaylandSeat *>(data);
   if (self->m_xkbState != nullptr) {
-    xkb_state_update_mask(self->m_xkbState, modsDepressed, modsLatched, modsLocked, 0, 0, group);
+    xkb_state_update_mask(self->m_xkbState, modsDepressed, modsLatched,
+                          modsLocked, 0, 0, group);
   }
 }
 
-void WaylandSeat::handleKeyboardRepeatInfo(void* data, wl_keyboard* /*keyboard*/, std::int32_t rate,
+void WaylandSeat::handleKeyboardRepeatInfo(void *data,
+                                           wl_keyboard * /*keyboard*/,
+                                           std::int32_t rate,
                                            std::int32_t delay) {
-  auto* self = static_cast<WaylandSeat*>(data);
+  auto *self = static_cast<WaylandSeat *>(data);
   self->m_repeatRate = rate;
   self->m_repeatDelayMs = delay;
 }
@@ -502,8 +556,11 @@ int WaylandSeat::repeatPollTimeoutMs() const {
   if (now >= m_repeatNextFire) {
     return 0;
   }
-  const auto ms = std::chrono::ceil<std::chrono::milliseconds>(m_repeatNextFire - now).count();
-  return static_cast<int>(std::min<long long>(ms, std::numeric_limits<int>::max()));
+  const auto ms =
+      std::chrono::ceil<std::chrono::milliseconds>(m_repeatNextFire - now)
+          .count();
+  return static_cast<int>(
+      std::min<long long>(ms, std::numeric_limits<int>::max()));
 }
 
 void WaylandSeat::stopKeyRepeat() { m_repeatActive = false; }
@@ -528,7 +585,8 @@ std::string WaylandSeat::currentLayoutName() const {
     return {};
   }
 
-  const xkb_layout_index_t layout = xkb_state_serialize_layout(m_xkbState, XKB_STATE_LAYOUT_EFFECTIVE);
+  const xkb_layout_index_t layout =
+      xkb_state_serialize_layout(m_xkbState, XKB_STATE_LAYOUT_EFFECTIVE);
   if (layout == XKB_LAYOUT_INVALID) {
     return {};
   }
@@ -538,7 +596,7 @@ std::string WaylandSeat::currentLayoutName() const {
     return {};
   }
 
-  const char* name = xkb_keymap_layout_get_name(m_xkbKeymap, layout);
+  const char *name = xkb_keymap_layout_get_name(m_xkbKeymap, layout);
   if (name == nullptr) {
     return {};
   }
@@ -555,7 +613,7 @@ std::vector<std::string> WaylandSeat::layoutNames() const {
   const xkb_layout_index_t layoutCount = xkb_keymap_num_layouts(m_xkbKeymap);
   layouts.reserve(layoutCount);
   for (xkb_layout_index_t i = 0; i < layoutCount; ++i) {
-    const char* name = xkb_keymap_layout_get_name(m_xkbKeymap, i);
+    const char *name = xkb_keymap_layout_get_name(m_xkbKeymap, i);
     if (name != nullptr && name[0] != '\0') {
       layouts.emplace_back(name);
     }
@@ -570,8 +628,11 @@ WaylandSeat::LockKeysState WaylandSeat::lockKeysState() const {
     return state;
   }
 
-  state.capsLock = xkb_state_led_name_is_active(m_xkbState, XKB_LED_NAME_CAPS) != 0;
-  state.numLock = xkb_state_led_name_is_active(m_xkbState, XKB_LED_NAME_NUM) != 0;
-  state.scrollLock = xkb_state_led_name_is_active(m_xkbState, XKB_LED_NAME_SCROLL) != 0;
+  state.capsLock =
+      xkb_state_led_name_is_active(m_xkbState, XKB_LED_NAME_CAPS) != 0;
+  state.numLock =
+      xkb_state_led_name_is_active(m_xkbState, XKB_LED_NAME_NUM) != 0;
+  state.scrollLock =
+      xkb_state_led_name_is_active(m_xkbState, XKB_LED_NAME_SCROLL) != 0;
   return state;
 }

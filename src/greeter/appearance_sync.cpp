@@ -4,15 +4,17 @@
 #include <cstring>
 #include <fstream>
 #include <json.hpp>
-#include <pwd.h>
 #include <string>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <vector>
 
 namespace greeter::appearance {
 
 namespace {
+
+constexpr mode_t kSyncedDirMode =
+    S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+constexpr mode_t kSyncedFileMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
 [[nodiscard]] bool isWallpaperFileName(std::string_view name) {
   if (name == kWallpaperBaseName) {
@@ -23,16 +25,6 @@ namespace {
          name.substr(0, kPrefix.size()) == kPrefix;
 }
 
-[[nodiscard]] bool setOwnership(const std::filesystem::path &path, uid_t uid,
-                                gid_t gid, std::string &errorOut) {
-  if (::chown(path.c_str(), uid, gid) != 0) {
-    errorOut = std::string("chown failed for '") + path.string() +
-               "': " + std::strerror(errno);
-    return false;
-  }
-  return true;
-}
-
 [[nodiscard]] bool setMode(const std::filesystem::path &path, mode_t mode,
                            std::string &errorOut) {
   if (::chmod(path.c_str(), mode) != 0) {
@@ -41,21 +33,6 @@ namespace {
     return false;
   }
   return true;
-}
-
-[[nodiscard]] std::optional<std::pair<uid_t, gid_t>>
-resolveGreeterCredentials(std::string &errorOut) {
-  const char *userName = std::getenv(kGreeterUserEnv);
-  if (userName == nullptr || userName[0] == '\0') {
-    userName = kDefaultGreeterUser;
-  }
-
-  const passwd *account = ::getpwnam(userName);
-  if (account == nullptr) {
-    errorOut = std::string("greeter user '") + userName + "' does not exist";
-    return std::nullopt;
-  }
-  return std::pair<uid_t, gid_t>{account->pw_uid, account->pw_gid};
 }
 
 [[nodiscard]] bool validatePaletteObject(const nlohmann::json &palette,
@@ -77,8 +54,7 @@ resolveGreeterCredentials(std::string &errorOut) {
 
 [[nodiscard]] bool installRegularFile(const std::filesystem::path &source,
                                       const std::filesystem::path &destination,
-                                      mode_t mode, uid_t uid, gid_t gid,
-                                      std::string &errorOut) {
+                                      mode_t mode, std::string &errorOut) {
   std::error_code ec;
   std::filesystem::copy_file(source, destination,
                              std::filesystem::copy_options::overwrite_existing,
@@ -88,23 +64,20 @@ resolveGreeterCredentials(std::string &errorOut) {
                destination.string() + "': " + ec.message();
     return false;
   }
-  if (!setMode(destination, mode, errorOut)) {
-    return false;
-  }
-  return setOwnership(destination, uid, gid, errorOut);
+  return setMode(destination, mode, errorOut);
 }
 
 [[nodiscard]] bool
-removeInstalledWallpapers(const std::filesystem::path &stateDir,
+removeInstalledWallpapers(const std::filesystem::path &syncedDir,
                           std::string &errorOut) {
   std::error_code ec;
-  if (!std::filesystem::is_directory(stateDir, ec) || ec) {
+  if (!std::filesystem::is_directory(syncedDir, ec) || ec) {
     return true;
   }
 
-  for (const auto &entry : std::filesystem::directory_iterator(stateDir, ec)) {
+  for (const auto &entry : std::filesystem::directory_iterator(syncedDir, ec)) {
     if (ec) {
-      errorOut = std::string("failed to enumerate '") + stateDir.string() +
+      errorOut = std::string("failed to enumerate '") + syncedDir.string() +
                  "': " + ec.message();
       return false;
     }
@@ -120,60 +93,6 @@ removeInstalledWallpapers(const std::filesystem::path &stateDir,
     }
   }
   return true;
-}
-
-[[nodiscard]] bool writePreferencesFile(const std::filesystem::path &path,
-                                        const nlohmann::json &data, mode_t mode,
-                                        uid_t uid, gid_t gid,
-                                        std::string &errorOut) {
-  const auto tempPath = path.string() + ".tmp";
-  {
-    std::ofstream out(tempPath);
-    if (!out.is_open()) {
-      errorOut = std::string("failed to open '") + tempPath + "' for write";
-      return false;
-    }
-    out << data.dump(2) << '\n';
-  }
-
-  std::error_code ec;
-  std::filesystem::rename(tempPath, path, ec);
-  if (ec) {
-    std::filesystem::remove(tempPath, ec);
-    errorOut = std::string("failed to install preferences at '") +
-               path.string() + "': " + ec.message();
-    return false;
-  }
-
-  if (!setMode(path, mode, errorOut)) {
-    return false;
-  }
-  return setOwnership(path, uid, gid, errorOut);
-}
-
-[[nodiscard]] bool writeSyncedDefaultPreferences(uid_t uid, gid_t gid,
-                                                 std::string &errorOut) {
-  const auto path = preferencesPath();
-  nlohmann::json data;
-  std::error_code ec;
-  if (std::filesystem::is_regular_file(path, ec) && !ec) {
-    std::ifstream in(path);
-    if (in.is_open()) {
-      try {
-        data = nlohmann::json::parse(in);
-        if (!data.is_object()) {
-          data = nlohmann::json::object();
-        }
-      } catch (const std::exception &) {
-        data = nlohmann::json::object();
-      }
-    }
-  }
-
-  data["scheme_name"] = kSyncedSchemeDisplayName;
-
-  return writePreferencesFile(path, data, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH,
-                              uid, gid, errorOut);
 }
 
 [[nodiscard]] std::vector<std::filesystem::path>
@@ -199,20 +118,20 @@ stagingWallpaperFiles(const std::filesystem::path &stagingDirectory) {
 
 } // namespace
 
-std::filesystem::path stateDirectory() {
-  const char *overrideDir = std::getenv(kStateDirEnv);
+std::filesystem::path syncedDataDirectory() {
+  const char *overrideDir = std::getenv(kSyncedDataDirEnv);
   if (overrideDir != nullptr && overrideDir[0] != '\0') {
     return std::filesystem::path(overrideDir);
   }
-  return std::filesystem::path(kDefaultStateDir);
+  return std::filesystem::path(kDefaultSyncedDataDir);
+}
+
+std::filesystem::path packageConfPath() {
+  return syncedDataDirectory() / kGreeterConfFileName;
 }
 
 std::filesystem::path manifestPath() {
-  return stateDirectory() / kManifestFileName;
-}
-
-std::filesystem::path preferencesPath() {
-  return stateDirectory() / kPreferencesFileName;
+  return syncedDataDirectory() / kManifestFileName;
 }
 
 bool syncedAppearanceInstalled() {
@@ -316,24 +235,14 @@ bool installFromStaging(const std::filesystem::path &stagingDirectory,
     return false;
   }
 
-  const auto credentials = resolveGreeterCredentials(errorOut);
-  if (!credentials.has_value()) {
-    return false;
-  }
-  const auto [uid, gid] = *credentials;
-
-  const auto destination = stateDirectory();
+  const auto destination = syncedDataDirectory();
   std::filesystem::create_directories(destination, ec);
   if (ec) {
     errorOut = std::string("failed to create '") + destination.string() +
                "': " + ec.message();
     return false;
   }
-  if (!setMode(destination, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH,
-               errorOut)) {
-    return false;
-  }
-  if (!setOwnership(destination, uid, gid, errorOut)) {
+  if (!setMode(destination, kSyncedDirMode, errorOut)) {
     return false;
   }
 
@@ -343,8 +252,7 @@ bool installFromStaging(const std::filesystem::path &stagingDirectory,
 
   const auto manifestSource = stagingManifestPath(stagingDirectory);
   const auto manifestDestination = manifestPath();
-  if (!installRegularFile(manifestSource, manifestDestination,
-                          S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, uid, gid,
+  if (!installRegularFile(manifestSource, manifestDestination, kSyncedFileMode,
                           errorOut)) {
     return false;
   }
@@ -352,14 +260,9 @@ bool installFromStaging(const std::filesystem::path &stagingDirectory,
   for (const auto &wallpaperSource : stagingWallpaperFiles(stagingDirectory)) {
     const auto wallpaperDestination = destination / wallpaperSource.filename();
     if (!installRegularFile(wallpaperSource, wallpaperDestination,
-                            S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, uid, gid,
-                            errorOut)) {
+                            kSyncedFileMode, errorOut)) {
       return false;
     }
-  }
-
-  if (!writeSyncedDefaultPreferences(uid, gid, errorOut)) {
-    return false;
   }
 
   return true;

@@ -4,16 +4,14 @@ set -eu
 GREETER_BIN="${NOCTALIA_GREETER_BIN:-/usr/local/bin/noctalia-greeter}"
 LOG_FILE="${NOCTALIA_GREETER_LOG:-/tmp/noctalia-greeter-greetd.log}"
 
-# Tee cage + greeter output to a single file for greetd debugging.
+# Log cage and greeter to one file.
 exec >>"${LOG_FILE}" 2>&1
 
 echo "=== noctalia-greeter-session $(date -Iseconds) pid=$$ uid=$(id -u) euid=$(id -u -r 2>/dev/null || id -u) ==="
 echo "GREETER_BIN=${GREETER_BIN}"
 echo "LOG_FILE=${LOG_FILE}"
 
-# Always use a private runtime dir under greetd. PAM may export
-# XDG_RUNTIME_DIR=/run/user/<uid> without keeping that directory around for the
-# full cage+greeter lifetime (greeter then fails wl_display_connect with ENOENT).
+# Private runtime dir; PAM XDG_RUNTIME_DIR may vanish before cage exits.
 _pam_runtime="${XDG_RUNTIME_DIR:-unset}"
 XDG_RUNTIME_DIR="/tmp/noctalia-runtime-$(id -u)"
 export XDG_RUNTIME_DIR

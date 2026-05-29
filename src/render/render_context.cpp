@@ -102,8 +102,7 @@ void RenderContext::initialize(GlSharedContext &shared) {
   m_backend = createDefaultRenderBackend();
   m_backend->initialize(shared);
 
-  // Pango handles font fallback via Fontconfig automatically — no explicit
-  // chain.
+  // Fontconfig handles font fallback via Pango.
   m_backend->textureManager().probeExtensions();
   m_textRenderer.initialize(m_backend.get(), &m_backend->textureManager());
   m_glyphRenderer.initialize(paths::assetPath("fonts/tabler.ttf").string(),
@@ -124,12 +123,8 @@ void RenderContext::makeCurrent(RenderTarget &target) {
     throw std::runtime_error("RenderContext has no initialized backend");
   }
   m_backend->makeCurrent(target);
-  // Sync the shared text/glyph renderer to this target's buffer/logical ratio
-  // unconditionally on every makeCurrent. The text and glyph renderers are
-  // process-singletons; if this is left out, layout/measure on one surface can
-  // run at a stale scale set by the last-rendered surface (visible as label
-  // jitter on multi-monitor setups with mixed fractional scales). renderScene
-  // also goes through this path indirectly via beginFrame.
+  // Shared text/glyph renderers must match this target scale on every
+  // makeCurrent.
   syncContentScale(target);
 }
 
@@ -386,11 +381,7 @@ void RenderContext::renderNode(const Node *node, const Mat3 &parentTransform,
     break;
   }
 
-  // Fast path: children are already in zIndex order (the common case — most
-  // callers never touch zIndex, or set it identically across siblings). Skip
-  // allocating/sorting a side vector and iterate the child list directly.
-  // Only fall back to the sorted copy when there's an actual out-of-order
-  // pair, which removes a per-node heap allocation from every rendered frame.
+  // Iterate children in z-order when already sorted; else stable_sort once.
   const auto &children = node->children();
   bool childrenSorted = true;
   for (std::size_t i = 1; i < children.size(); ++i) {
@@ -449,12 +440,11 @@ void RenderContext::renderNode(const Node *node, const Mat3 &parentTransform,
 
 void RenderContext::cleanup() {
   if (m_backend != nullptr) {
-    // Need a current context to destroy GL resources, but we may not have a
-    // surface.
+    // Current context required to destroy GL resources.
     m_backend->makeCurrentNoSurface();
   }
 
-  // Text renderers first — they destroy GL textures and need a current context.
+  // Text renderers destroy GL textures; run while context is current.
   m_textRenderer.cleanup();
   m_glyphRenderer.cleanup();
 

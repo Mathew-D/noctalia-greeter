@@ -11,10 +11,9 @@ public:
   void ensureInitialized();
   void destroy();
 
-  // Draw srcTex to the currently-bound framebuffer using a separable Gaussian blur.
-  // dirX/dirY: blur direction (1,0 = horizontal, 0,1 = vertical).
-  // radius: kernel half-width in texels (0 = no blur, 20 = maximum).
-  void draw(TextureId srcTex, std::uint32_t width, std::uint32_t height, float dirX, float dirY, float radius) const;
+  // Separable Gaussian blur; dirX/dirY pick axis, radius is kernel half-width.
+  void draw(TextureId srcTex, std::uint32_t width, std::uint32_t height,
+            float dirX, float dirY, float radius) const;
 
 private:
   ShaderProgram m_program;

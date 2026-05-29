@@ -104,38 +104,48 @@ Meson installs the following (paths use your `prefix`, commonly `/usr/local`):
 |----------|------------------|------|
 | `noctalia-greeter` | `bindir` | Login UI (Wayland client under Cage) |
 | `noctalia-greeter-session` | `bindir` | greetd session command (`cage` + greeter) |
-| `noctalia-greeter-apply-appearance` | `bindir` | Root helper for shell → greeter appearance sync |
+| `noctalia-greeter-apply-appearance` | `bindir` | Root helper for shell -> greeter appearance sync |
 | `assets/` | `share/noctalia-greeter/assets` | Fonts, icons, etc. |
 | `org.noctalia.greeter.apply-appearance.policy` | `share/polkit-1/actions` | polkit rule for the sync helper |
 
-**Runtime state** (created by setup scripts and the sync helper):
+**Runtime paths**:
 
-- `/var/lib/noctalia-greeter/` — greeter-owned appearance data (`appearance.json`, optional `wallpaper.*`)
-- `/var/log/noctalia-greeter.log`, `/var/lib/noctalia-greeter/greeter.log` — logs (see `just setup-log-dir`)
+- `/var/lib/noctalia-greeter/`: synced appearance (`appearance.json`, `wallpaper.*`) and `greeter.conf` (session/scheme prefs)
+- `/var/log/noctalia-greeter.log`, `/var/lib/noctalia-greeter/greeter.log`: logs (`just setup-log-dir`)
 
 **Environment overrides** (optional):
 
-- `NOCTALIA_GREETER_STATE_DIR` — override appearance install directory (default `/var/lib/noctalia-greeter`)
-- `GREETER_USER` — account that owns state files (default `greeter`)
-- `NOCTALIA_GREETER_ASSETS_DIR` — asset root when not using the installed `share/noctalia-greeter/assets` tree
+- `NOCTALIA_GREETER_STATE_DIR`: synced appearance directory (default `/var/lib/noctalia-greeter`)
+- `GREETER_USER`: greeter account for setup/logs only
+- `NOCTALIA_GREETER_ASSETS_DIR`: asset root override
 
 ### Appearance sync (Noctalia Shell v5)
 
 Appearance sync is only supported with **[Noctalia Shell v5](https://github.com/noctalia-dev/noctalia-shell/tree/v5)** (the `v5` branch). Older shell releases do not include the settings control or staging flow.
 
-From **Settings → Shell → Security → Noctalia Greeter → Sync Now**, the shell:
+From **Settings -> Shell -> Security -> Noctalia Greeter -> Sync Now**, the shell:
 
 1. Stages `appearance.json` (and a wallpaper file when needed) under the user’s `$XDG_RUNTIME_DIR/noctalia-greeter-sync/`
 2. Runs `pkexec noctalia-greeter-apply-appearance <staging-dir>` (admin prompt via polkit)
-3. Installs into `/var/lib/noctalia-greeter/` with mode `0644` / directory `0755`, owned by `greeter`
+3. Installs into `/var/lib/noctalia-greeter/` as root-owned, world-readable files (`0755` dir, `0644` data). No greetd user lookup.
 
-The greeter reads `appearance.json` on startup and adds a **Synced** entry to the color-scheme picker (built-in palettes keep solid backgrounds). Each successful sync also writes `/var/lib/noctalia-greeter/state.json` with `"scheme_name": "Synced"` so the greeter defaults to that scheme on the next login (session choice is preserved when already set). **Both packages must be installed** (shell v5 + greeter + polkit policy). After syncing, restart greetd or log out once to see the shell wallpaper and palette.
+The greeter reads `appearance.json` on startup and adds a **Synced** entry to the color-scheme picker (built-in palettes keep solid backgrounds). When synced data is present, **Synced** is the default scheme. Session and color-scheme choices are read from and written to `/var/lib/noctalia-greeter/greeter.conf` (including when changed in the greeter UI). **Both packages must be installed** (shell v5 + greeter + polkit policy). After syncing, restart greetd or log out once to see the shell wallpaper and palette.
+
+Example `greeter.conf` (values must match a discovered session **Name** and a listed scheme):
+
+```ini
+greeter_user=greetd
+session="niri"
+scheme="Synced"
+```
 
 Manual test of the helper (as root), after staging a directory:
 
 ```bash
 sudo ./build/noctalia-greeter-apply-appearance /run/user/1000/noctalia-greeter-sync
 ```
+
+`just install` runs `setup_greeter_system.sh`, which calls `noctalia-greeter-apply-appearance --setup-system` to create `greeter.conf` and give the greetd user write access (UI changes persist). Optional `session` / `scheme` keys in that file set defaults. Appearance sync does not depend on `greeter_user`.
 
 ---
 

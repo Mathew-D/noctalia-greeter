@@ -4,6 +4,7 @@
 #include "core/resource_paths.h"
 #include "greeter/appearance_config.h"
 #include "greeter/appearance_sync.h"
+#include "greeter/greeter_preferences.h"
 #include "greeter/greeter_window.h"
 #include "render/core/texture_manager.h"
 #include "render/render_context.h"
@@ -48,9 +49,7 @@ Button::ButtonStateColors makePaletteState(ColorRole bg,
   };
 }
 
-// Greeter user rows: normal surface-variant, hover secondary, selected/pressed
-// primary. Uses the same ColorRole / ColorSpec path as noctalia-shell Button
-// palettes.
+// User row button palette matches noctalia-shell ColorRole usage.
 Button::ButtonPalette userRowPalette() {
   constexpr float kDisabledAlpha = 0.55f;
   return Button::ButtonPalette{
@@ -102,23 +101,6 @@ std::string sanitizeDesktopExec(const std::string &exec) {
   return trim(out);
 }
 
-std::filesystem::path preferencesPath() {
-  if (greeter::appearance::syncedAppearanceInstalled()) {
-    return greeter::appearance::preferencesPath();
-  }
-
-  const char *xdgStateHome = std::getenv("XDG_STATE_HOME");
-  if (xdgStateHome != nullptr && xdgStateHome[0] != '\0') {
-    return std::filesystem::path(xdgStateHome) / "noctalia-greeter" /
-           "state.json";
-  }
-  const char *home = std::getenv("HOME");
-  if (home != nullptr && home[0] != '\0') {
-    return std::filesystem::path(home) / ".local" / "state" /
-           "noctalia-greeter" / "state.json";
-  }
-  return std::filesystem::path("/tmp") / "noctalia-greeter-state.json";
-}
 } // namespace
 
 GreeterSurface::GreeterSurface() = default;
@@ -423,8 +405,7 @@ void GreeterSurface::initialize(GreeterWindow &window, RenderContext *context) {
   }
 
   const auto logoPath = paths::assetPath("noctalia.svg");
-  // Rasterize SVG into a larger texture and enable mipmaps so downscaling
-  // looks smooth instead of "crunchy".
+  // Large logo texture with mipmaps for smooth downscale.
   m_brandLogoTexture = m_renderContext->textureManager().loadFromFile(
       logoPath.string(), 1024, true);
   if (m_brandLogo != nullptr && m_brandLogoTexture.id != 0) {
@@ -693,8 +674,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     static_cast<RectNode *>(m_brandPane)->setVisible(false);
   }
 
-  // Refresh palette-driven text colors each layout so theme switches recolor
-  // the full scene (not only nodes that rebuild their style elsewhere).
+  // Refresh text colors each layout for theme/scheme changes.
   m_titleLabel->setColor(colorForRole(ColorRole::OnSurface));
   m_formSubtitleLabel->setColor(colorForRole(ColorRole::OnSurfaceVariant));
   if (m_brandTitleLabel != nullptr) {
@@ -1275,67 +1255,40 @@ void GreeterSurface::syncWallpaperTexture() {
 }
 
 void GreeterSurface::loadPreferences() {
-  const auto path = preferencesPath();
-  std::error_code ec;
-  if (!std::filesystem::exists(path, ec) || ec) {
-    return;
-  }
+  const auto prefs = greeter::loadGreeterPreferences();
 
-  std::ifstream in(path);
-  if (!in.is_open()) {
-    return;
-  }
-
-  try {
-    const auto data = nlohmann::json::parse(in);
-    const std::string sessionName = data.value("session_name", "");
-    const std::string schemeName = data.value("scheme_name", "");
-
-    if (!sessionName.empty()) {
-      for (std::size_t i = 0; i < m_sessions.size(); ++i) {
-        if (m_sessions[i].name == sessionName) {
-          m_selectedSession = i;
-          break;
-        }
+  if (prefs.session.has_value()) {
+    for (std::size_t i = 0; i < m_sessions.size(); ++i) {
+      if (m_sessions[i].name == *prefs.session) {
+        m_selectedSession = i;
+        break;
       }
     }
-    if (!schemeName.empty()) {
-      for (std::size_t i = 0; i < m_schemeNames.size(); ++i) {
-        if (m_schemeNames[i] == schemeName) {
-          m_selectedScheme = i;
-          break;
-        }
+  }
+
+  if (prefs.scheme.has_value()) {
+    for (std::size_t i = 0; i < m_schemeNames.size(); ++i) {
+      if (m_schemeNames[i] == *prefs.scheme) {
+        m_selectedScheme = i;
+        break;
       }
     }
-  } catch (const std::exception &e) {
-    kLog.warn("failed to parse preferences '{}': {}", path.string(), e.what());
   }
 }
 
 void GreeterSurface::savePreferences() const {
-  const auto path = preferencesPath();
-  std::error_code ec;
-  std::filesystem::create_directories(path.parent_path(), ec);
-  if (ec) {
-    kLog.warn("failed to create preferences directory '{}': {}",
-              path.parent_path().string(), ec.message());
-    return;
-  }
-
-  nlohmann::json data;
+  greeter::GreeterPreferences prefs;
   if (m_selectedSession < m_sessions.size()) {
-    data["session_name"] = m_sessions[m_selectedSession].name;
+    prefs.session = m_sessions[m_selectedSession].name;
   }
   if (m_selectedScheme < m_schemeNames.size()) {
-    data["scheme_name"] = m_schemeNames[m_selectedScheme];
+    prefs.scheme = m_schemeNames[m_selectedScheme];
   }
 
-  std::ofstream out(path);
-  if (!out.is_open()) {
-    kLog.warn("failed to open preferences '{}' for write", path.string());
-    return;
+  if (!greeter::saveGreeterPreferences(prefs)) {
+    kLog.warn("failed to save greeter.conf (check permissions on {})",
+              greeter::greeterConfPath().string());
   }
-  out << data.dump(2) << '\n';
 }
 
 void GreeterSurface::toggleUserMenu() {

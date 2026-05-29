@@ -49,7 +49,7 @@ echo "info: backup created at ${backup}"
 tmp="$(mktemp)"
 trap 'rm -f "${tmp}"' EXIT
 
-# Insert after the last session line if one exists, otherwise append.
+# Insert after last session line, or append.
 if rg -n "^[[:space:]]*session[[:space:]]+" "${PAM_FILE}" >/dev/null 2>&1; then
   last_session="$(rg -n "^[[:space:]]*session[[:space:]]+" "${PAM_FILE}" | tail -n 1 | awk -F: '{print $1}')"
   awk -v line="${PAM_LINE}" -v last="${last_session}" '

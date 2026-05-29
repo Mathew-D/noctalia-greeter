@@ -7,35 +7,33 @@
 
 #include <GLES2/gl2.h>
 
-// Renders a glyph quad from either:
-//   - a pre-rasterized premultiplied-RGBA texture (colored emoji, etc.), or
-//   - an alpha-only (GL_ALPHA) coverage texture that gets tinted by u_tint.
-// Used by the Pango/Cairo text renderer and the FreeType/Cairo icon renderer.
+// Glyph quad from premultiplied RGBA or alpha coverage tinted in the shader.
 class GlyphProgram {
 public:
   GlyphProgram() = default;
   ~GlyphProgram() = default;
 
-  GlyphProgram(const GlyphProgram&) = delete;
-  GlyphProgram& operator=(const GlyphProgram&) = delete;
+  GlyphProgram(const GlyphProgram &) = delete;
+  GlyphProgram &operator=(const GlyphProgram &) = delete;
 
   void ensureInitialized();
   void destroy();
 
   // RGBA path: sample the texture as premultiplied RGBA, scale by opacity.
-  void draw(TextureId texture, float surfaceWidth, float surfaceHeight, float width, float height, float u0, float v0,
-            float u1, float v1, float opacity, const Mat3& transform = Mat3::identity()) const;
+  void draw(TextureId texture, float surfaceWidth, float surfaceHeight,
+            float width, float height, float u0, float v0, float u1, float v1,
+            float opacity, const Mat3 &transform = Mat3::identity()) const;
 
-  // Alpha-tint path: sample the texture's alpha channel as coverage, multiply
-  // by `tint` (which is interpreted as straight RGBA — the shader premultiplies
-  // it internally), scale by opacity.
-  void drawTinted(TextureId texture, float surfaceWidth, float surfaceHeight, float width, float height, float u0,
-                  float v0, float u1, float v1, float opacity, const Color& tint,
-                  const Mat3& transform = Mat3::identity()) const;
+  // Alpha coverage tinted by u_tint in the shader.
+  void drawTinted(TextureId texture, float surfaceWidth, float surfaceHeight,
+                  float width, float height, float u0, float v0, float u1,
+                  float v1, float opacity, const Color &tint,
+                  const Mat3 &transform = Mat3::identity()) const;
 
 private:
-  void bindCommon(TextureId texture, float surfaceWidth, float surfaceHeight, float width, float height, float u0,
-                  float v0, float u1, float v1, float opacity, const Mat3& transform) const;
+  void bindCommon(TextureId texture, float surfaceWidth, float surfaceHeight,
+                  float width, float height, float u0, float v0, float u1,
+                  float v1, float opacity, const Mat3 &transform) const;
 
   ShaderProgram m_program;
   GLint m_positionLocation = -1;

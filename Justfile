@@ -1,4 +1,4 @@
-# noctalia-greeter — Justfile
+# noctalia-greeter, Justfile
 
 # Configure debug build dir
 configure:
@@ -95,18 +95,18 @@ run-cage-asan: build-asan
   ASAN_OPTIONS=abort_on_error=1:fast_unwind_on_malloc=0:symbolize=1 \
   dbus-run-session cage -s -- ./build-asan/noctalia-greeter
 
-# Run in your current Wayland session (niri, sway, etc.) — no nested compositor
+# Run in your current Wayland session (niri, sway, etc.), no nested compositor
 run-niri: build
   #!/usr/bin/env bash
   set -euo pipefail
   if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
-    echo "WAYLAND_DISPLAY is not set — run from a terminal inside niri."
+    echo "WAYLAND_DISPLAY is not set; run from a terminal inside niri."
     exit 1
   fi
   log="${NOCTALIA_GREETER_LOG:-$HOME/.cache/noctalia-greeter.log}"
   mkdir -p "$(dirname "$log")"
   echo "WAYLAND_DISPLAY=$WAYLAND_DISPLAY log=$log"
-  echo "Auth needs greetd — unset GREETD_SOCK for UI-only dev, or point at a test socket."
+  echo "Auth needs greetd; unset GREETD_SOCK for UI-only dev, or point at a test socket."
   env -u GREETD_SOCK NOCTALIA_GREETER_LOG="$log" ./build/noctalia-greeter
 
 # Kill greeter and stop greetd when the display is stuck (run over SSH or blind)
@@ -116,8 +116,7 @@ recover:
   sudo sv stop greetd 2>/dev/null || true
   echo "If the screen is still wrong: sudo chvt 2"
 
-# Run as greeter user — only works if greetd/elgind gave greeter a session on that VT.
-# Usually fails manually with "Only owner of session may take control"; use run-local instead.
+# Run as greeter user. Needs a greetd session on that VT; use run-local if manual login fails.
 run-greeter bin="/usr/local/bin/noctalia-greeter":
   @echo "Ensure greetd is stopped: sudo sv stop greetd"
   sudo -u greeter dbus-run-session cage -s -- {{bin}}

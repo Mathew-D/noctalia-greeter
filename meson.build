@@ -148,6 +148,7 @@ _greeter_sources = files(
   'src/greetd/greetd_client.cpp',
   'src/greeter/appearance_sync.cpp',
   'src/greeter/appearance_config.cpp',
+  'src/greeter/greeter_preferences.cpp',
   'src/greeter/greeter_surface.cpp',
   'src/greeter/greeter_window.cpp',
   'src/greeter/greeter.cpp',
@@ -207,6 +208,8 @@ install_data(
 _apply_appearance_sources = files(
   'src/core/log.cpp',
   'src/greeter/appearance_sync.cpp',
+  'src/greeter/greetd_user.cpp',
+  'src/greeter/greeter_preferences.cpp',
   'src/tools/apply_appearance_main.cpp',
 )
 
