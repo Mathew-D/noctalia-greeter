@@ -117,7 +117,7 @@ void GreeterWindow::matchPrimaryOutputSize() {
     return;
   }
 
-  const auto logical = m_client.primaryLogicalSize();
+  const auto logical = m_client.targetLogicalSize();
   if (!logical) {
     return;
   }
@@ -311,7 +311,8 @@ void GreeterWindow::handleXdgSurfaceConfigure(void *data, xdg_surface *surface,
     height = static_cast<std::uint32_t>(self->m_lastToplevelHeight);
   }
   if (width == 0 || height == 0) {
-    if (const auto logical = self->m_client.primaryLogicalSize()) {
+    const auto logical = self->m_client.targetLogicalSize();
+    if (logical) {
       if (width == 0) {
         width = logical->first;
       }
@@ -325,14 +326,6 @@ void GreeterWindow::handleXdgSurfaceConfigure(void *data, xdg_surface *surface,
   }
   if (height == 0) {
     height = 720;
-  }
-  if (const auto output = self->m_client.primaryLogicalSize()) {
-    if (width > output->first || height > output->second) {
-      kLog.info("clamping configure {}x{} to primary output {}x{}", width,
-                height, output->first, output->second);
-      width = std::min(width, output->first);
-      height = std::min(height, output->second);
-    }
   }
   self->applyConfigure(width, height);
 }

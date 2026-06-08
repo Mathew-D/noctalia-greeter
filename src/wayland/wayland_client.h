@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -15,11 +17,21 @@ struct wl_registry;
 struct wl_seat;
 struct xdg_wm_base;
 
+struct WaylandOutputLayout {
+  int32_t x = 0;
+  int32_t y = 0;
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+};
+
 struct WaylandOutputInfo {
   wl_output *output = nullptr;
   std::uint32_t registryName = 0;
+  std::string name;
   int32_t x = 0;
   int32_t y = 0;
+  int32_t physicalWidthMm = 0;
+  int32_t physicalHeightMm = 0;
   int32_t pixelWidth = 0;
   int32_t pixelHeight = 0;
   int32_t scale = 1;
@@ -44,6 +56,7 @@ public:
   void setPointerEventCallback(WaylandSeat::PointerEventCallback callback);
   void setKeyboardEventCallback(WaylandSeat::KeyboardEventCallback callback);
   void setOutputsChangedCallback(std::function<void()> callback);
+  void setPreferredOutputName(std::optional<std::string> name);
 
   [[nodiscard]] int repeatPollTimeoutMs() const;
   void repeatTick();
@@ -63,16 +76,32 @@ public:
 
   // Buffer scale for wl_surface_set_buffer_scale and HiDPI buffer sizing.
   [[nodiscard]] int32_t effectiveBufferScale() const noexcept;
+  [[nodiscard]] int32_t preferredBufferScale() const noexcept;
   [[nodiscard]] int32_t
   outputBufferScale(const wl_output *output) const noexcept;
   // Largest single output (logical pixels).
   [[nodiscard]] std::optional<std::pair<std::uint32_t, std::uint32_t>>
   primaryLogicalSize() const noexcept;
+  [[nodiscard]] std::optional<std::string>
+  primaryConnectorName() const noexcept;
   [[nodiscard]] std::optional<std::pair<std::uint32_t, std::uint32_t>>
-  logicalSizeForOutput(const wl_output *output) const noexcept;
-  // Bounding box across all outputs (cage -m extend / multi-monitor).
+  preferredLogicalSize() const noexcept;
+  [[nodiscard]] bool hasPreferredOutputName() const noexcept;
+  [[nodiscard]] bool hasReadyOutputs() const noexcept;
+  [[nodiscard]] bool hasResolvedPreferredOutput() const noexcept;
+  void forgetPreferredOutput() noexcept;
+  [[nodiscard]] std::optional<WaylandOutputLayout>
+  preferredOutputLayout() const noexcept;
+  [[nodiscard]] std::optional<WaylandOutputLayout>
+  greeterOutputLayout() const noexcept;
+  [[nodiscard]] bool needsOutputViewport() const noexcept;
+  [[nodiscard]] std::optional<std::pair<std::uint32_t, std::uint32_t>>
+  targetLogicalSize() const noexcept;
   [[nodiscard]] std::optional<std::pair<std::uint32_t, std::uint32_t>>
   combinedLogicalSize() const noexcept;
+  [[nodiscard]] std::optional<std::pair<std::uint32_t, std::uint32_t>>
+  logicalSizeForOutput(const wl_output *output) const noexcept;
+  [[nodiscard]] float uiScale() const noexcept;
 
   static void handleGlobal(void *data, wl_registry *registry,
                            std::uint32_t name, const char *interface,
@@ -101,8 +130,14 @@ private:
   void bindOutput(wl_registry *registry, std::uint32_t name,
                   std::uint32_t version);
   [[nodiscard]] const WaylandOutputInfo *primaryOutput() const noexcept;
+  [[nodiscard]] const WaylandOutputInfo *preferredOutput() const noexcept;
+  [[nodiscard]] const WaylandOutputInfo *
+  findOutputByName(std::string_view name) const noexcept;
+  [[nodiscard]] std::optional<WaylandOutputLayout>
+  layoutForOutput(const WaylandOutputInfo &output) const noexcept;
   void notifyOutputsChanged();
 
+  std::optional<std::string> m_preferredOutputName;
   wl_display *m_display = nullptr;
   wl_registry *m_registry = nullptr;
   wl_compositor *m_compositor = nullptr;

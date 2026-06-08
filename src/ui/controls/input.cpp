@@ -25,7 +25,6 @@ constexpr float kCursorRevealPadding = 2.0f;
 constexpr float kTextInnerInset = 3.0f;
 constexpr float kPlaceholderAlpha = 0.68f;
 constexpr float kPasswordGlyphScale = 0.82f;
-constexpr float kHorizontalPadding = Style::spaceMd;
 
 char32_t passwordMaskCodepoint() {
   return GlyphRegistry::lookup("circle-filled");
@@ -78,7 +77,7 @@ Input::Input() : Node(NodeType::Container) {
     if (!data.pressed || data.button != BTN_LEFT) {
       return;
     }
-    const float textStartX = kHorizontalPadding + kTextInnerInset;
+    const float textStartX = Style::spaceMd() + kTextInnerInset;
     m_cursorPos = xToByteOffset(data.localX - textStartX + m_scrollOffset);
     m_selectionAnchor = m_cursorPos;
     updateInteractiveGeometry();
@@ -295,7 +294,7 @@ void Input::doLayout(Renderer &renderer) {
   const bool showPasswordGlyphs = m_passwordMode && !m_value.empty();
   m_label->setVisible(!showPasswordGlyphs);
   if (!showPasswordGlyphs) {
-    const float textInset = kHorizontalPadding + kTextInnerInset;
+    const float textInset = Style::spaceMd() + kTextInnerInset;
     m_label->setMaxWidth(std::max(0.0f, w - textInset * 2.0f));
     m_label->measure(renderer);
   }
@@ -370,7 +369,7 @@ void Input::doLayout(Renderer &renderer) {
   }
 
   if (m_textViewport != nullptr) {
-    const float textInset = kHorizontalPadding + kTextInnerInset;
+    const float textInset = Style::spaceMd() + kTextInnerInset;
     const float viewportW = std::max(0.0f, w - textInset * 2.0f);
     m_textViewport->setPosition(textInset, 0.0f);
     m_textViewport->setSize(viewportW, h);
@@ -414,7 +413,7 @@ void Input::applyVisualState() {
       .fillMode = FillMode::Solid,
       .radius = Style::scaledRadiusMd(),
       .softness = 1.0f,
-      .borderWidth = Style::borderWidth,
+      .borderWidth = Style::borderWidth(),
   });
 
   const bool showingPlaceholder = m_value.empty() && !m_placeholder.empty();
@@ -545,7 +544,7 @@ std::size_t Input::selectionEnd() const noexcept {
 
 float Input::textViewportWidth() const noexcept {
   const float w = width() > 0.0f ? width() : kMinWidth;
-  const float textInset = kHorizontalPadding + kTextInnerInset;
+  const float textInset = Style::spaceMd() + kTextInnerInset;
   return std::max(0.0f, w - textInset * 2.0f);
 }
 

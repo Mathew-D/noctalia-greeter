@@ -11,6 +11,7 @@ struct GreeterPreferences {
   std::optional<std::string> defaultSession;
   std::optional<std::string> session;
   std::optional<std::string> scheme;
+  std::optional<std::string> output;
 };
 
 [[nodiscard]] std::filesystem::path greeterConfPath();

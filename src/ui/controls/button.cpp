@@ -34,7 +34,7 @@ Button::ButtonPalette paletteForVariant(ButtonVariant variant) {
   switch (variant) {
   case ButtonVariant::Default:
     return Button::ButtonPalette{
-        .borderWidth = Style::borderWidth,
+        .borderWidth = Style::borderWidth(),
         .normal = makeState(colorSpecFromRole(ColorRole::SurfaceVariant),
                             colorSpecFromRole(ColorRole::Outline),
                             colorSpecFromRole(ColorRole::OnSurface)),
@@ -69,7 +69,7 @@ Button::ButtonPalette paletteForVariant(ButtonVariant variant) {
     };
   case ButtonVariant::Secondary:
     return Button::ButtonPalette{
-        .borderWidth = Style::borderWidth,
+        .borderWidth = Style::borderWidth(),
         .normal = makeState(colorSpecFromRole(ColorRole::Secondary),
                             colorSpecFromRole(ColorRole::Outline),
                             colorSpecFromRole(ColorRole::OnSecondary)),
@@ -87,7 +87,7 @@ Button::ButtonPalette paletteForVariant(ButtonVariant variant) {
     };
   case ButtonVariant::Destructive:
     return Button::ButtonPalette{
-        .borderWidth = Style::borderWidth,
+        .borderWidth = Style::borderWidth(),
         .normal = makeState(colorSpecFromRole(ColorRole::Error),
                             colorSpecFromRole(ColorRole::Outline),
                             colorSpecFromRole(ColorRole::OnError)),
@@ -105,7 +105,7 @@ Button::ButtonPalette paletteForVariant(ButtonVariant variant) {
     };
   case ButtonVariant::Outline:
     return Button::ButtonPalette{
-        .borderWidth = Style::borderWidth,
+        .borderWidth = Style::borderWidth(),
         .normal = makeState(colorSpecFromRole(ColorRole::Surface),
                             colorSpecFromRole(ColorRole::Outline),
                             colorSpecFromRole(ColorRole::OnSurface)),
@@ -178,8 +178,8 @@ Button::ButtonPalette paletteForVariant(ButtonVariant variant) {
 
 Button::Button() {
   setAlign(FlexAlign::Center);
-  setMinHeight(Style::controlHeightSm);
-  setPadding(Style::spaceSm);
+  setMinHeight(Style::controlHeightSm());
+  setPadding(Style::spaceSm());
   setRadius(Style::scaledRadiusMd());
 
   auto area = std::make_unique<InputArea>();
@@ -416,11 +416,11 @@ void Button::ensureLabel() {
   }
   auto label = std::make_unique<Label>();
   m_label = static_cast<Label *>(addChild(std::move(label)));
-  setMinHeight(Style::controlHeight);
-  setPadding(Style::spaceSm, Style::spaceMd);
+  setMinHeight(Style::controlHeight());
+  setPadding(Style::spaceSm(), Style::spaceMd());
   if (m_glyph != nullptr) {
     setDirection(FlexDirection::Horizontal);
-    setGap(Style::spaceXs);
+    setGap(Style::spaceXs());
   }
   applyColors(m_targetBg, m_targetBorder, m_targetLabel);
 }
@@ -449,7 +449,7 @@ void Button::ensureGlyph() {
   m_glyph->setHitTestVisible(false);
   if (m_label != nullptr) {
     setDirection(FlexDirection::Horizontal);
-    setGap(Style::spaceXs);
+    setGap(Style::spaceXs());
   }
   applyColors(m_targetBg, m_targetBorder, m_targetLabel);
 }
@@ -457,11 +457,10 @@ void Button::ensureGlyph() {
 void Button::applyColors(const Color &bg, const Color &border,
                          const Color &label) {
   setFill(bg);
-  const bool isFocused =
-      m_enabled && m_inputArea != nullptr && m_inputArea->focused() &&
-      !(m_inputArea->pressed());
+  const bool isFocused = m_enabled && m_inputArea != nullptr &&
+                         m_inputArea->focused() && !(m_inputArea->pressed());
   const float borderWidth =
-      isFocused ? std::max(m_palette.borderWidth, Style::borderWidth * 2.0f)
+      isFocused ? std::max(m_palette.borderWidth, Style::borderWidth() * 2.0f)
                 : m_palette.borderWidth;
   setBorder(border, borderWidth);
   if (m_label != nullptr) {
@@ -495,7 +494,8 @@ void Button::resolveVisualStateColors(Color &targetBg, Color &targetBorder,
   bool isHovered = m_enabled && (!m_hoverSuppressed && hovered());
   bool isPressed = m_enabled && pressed();
   bool isSelected = m_enabled && m_selected;
-  bool isFocused = m_enabled && m_inputArea != nullptr && m_inputArea->focused();
+  bool isFocused =
+      m_enabled && m_inputArea != nullptr && m_inputArea->focused();
 
   if (!m_enabled) {
     targetBg = resolveColorSpec(m_palette.disabled.bg);

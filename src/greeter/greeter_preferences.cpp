@@ -138,9 +138,10 @@ using KeyValueMap = std::map<std::string, std::string>;
   out << "# noctalia-greeter greeter.conf\n";
   out << "# default_session: admin default (Wayland session Name=)\n";
   out << "# session: last used (UI); scheme: color scheme name\n";
+  out << "# output: Wayland connector; admin-only\n";
 
   static constexpr const char *kPreferredOrder[] = {
-      "greeter_user", "default_session", "session", "scheme"};
+      "greeter_user", "default_session", "session", "scheme", "output"};
   for (const char *key : kPreferredOrder) {
     const auto it = map.find(key);
     if (it != map.end()) {
@@ -239,8 +240,8 @@ GreeterPreferences loadGreeterPreferences() {
   const auto path = greeterConfPath();
   const KeyValueMap map = loadKeyValues(path);
 
-  static constexpr std::array<std::string_view, 4> kKnownKeys = {
-      "greeter_user", "default_session", "session", "scheme"};
+  static constexpr std::array<std::string_view, 5> kKnownKeys = {
+      "greeter_user", "default_session", "session", "scheme", "output"};
   for (const auto &[key, value] : map) {
     if (std::find(kKnownKeys.begin(), kKnownKeys.end(),
                   std::string_view(key)) == kKnownKeys.end()) {
@@ -251,6 +252,7 @@ GreeterPreferences loadGreeterPreferences() {
   prefs.defaultSession = mapValue(map, {"default_session"});
   prefs.session = mapValue(map, {"session"});
   prefs.scheme = mapValue(map, {"scheme"});
+  prefs.output = mapValue(map, {"output"});
   return prefs;
 }
 

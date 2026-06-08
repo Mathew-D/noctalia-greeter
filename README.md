@@ -42,7 +42,7 @@ Install everything below on the machine where greetd will run. Each list covers 
 
 ```sh
 sudo pacman -S meson gcc just \
-  greetd cage dbus polkit \
+  greetd cage wlr-randr dbus polkit \
   wayland wayland-protocols \
   libglvnd freetype2 fontconfig \
   cairo pango \
@@ -54,7 +54,7 @@ sudo pacman -S meson gcc just \
 
 ```sh
 sudo dnf install meson gcc-c++ just \
-  greetd cage dbus polkit \
+  greetd cage wlr-randr dbus polkit \
   wayland-devel wayland-protocols-devel \
   libEGL-devel mesa-libGLES-devel \
   freetype-devel fontconfig-devel \
@@ -67,7 +67,7 @@ sudo dnf install meson gcc-c++ just \
 
 ```sh
 sudo apt install meson g++ just \
-  greetd cage dbus policykit-1 \
+  greetd cage wlr-randr dbus policykit-1 \
   libwayland-dev wayland-protocols \
   libegl-dev libgles-dev \
   libfreetype-dev libfontconfig-dev \
@@ -80,7 +80,7 @@ sudo apt install meson g++ just \
 
 ```sh
 sudo xbps-install meson ninja pkg-config git \
-  greetd cage dbus polkit \
+  greetd cage wlr-randr dbus polkit \
   wayland-devel wayland-protocols libepoxy-devel \
   MesaLib-devel libglvnd-devel cairo-devel \
   pango-devel fontconfig-devel freetype-devel \
@@ -163,6 +163,28 @@ List valid session names:
 
 ```sh
 noctalia-greeter sessions
+```
+
+### Multi-monitor
+
+The greeter runs inside Cage, which can span all connected outputs. By default it shows on the **primary monitor only** (largest by pixel area). After Wayland connect it uses `wlr-randr` to turn off the other connectors so the login UI does not stretch across every display.
+
+To pin the greeter to a specific connector, set `output` in `/var/lib/noctalia-greeter/greeter.conf`:
+
+```ini
+output="DP-2"
+```
+
+`wlr-randr` is required (see Dependencies). If `output` is missing, empty, or names a disconnected connector, the greeter falls back to the primary display only.
+
+When `wlr-randr` cannot disable every other connector (some setups keep the primary on), the greeter letterboxes onto the chosen or primary output inside Cage's combined desktop instead of stretching the UI.
+
+On high-DPI panels (for example 4K without fractional scaling), the greeter scales its UI from the monitor's physical size when EDID reports it, otherwise from resolution. Scale is capped at 2×.
+
+List connector names from a running Wayland session:
+
+```sh
+noctalia-greeter outputs
 ```
 
 Restart greetd:

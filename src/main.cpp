@@ -17,6 +17,7 @@
 #include <string_view>
 #include <unistd.h>
 #include <vector>
+#include <wayland-client.h>
 
 namespace {
 constexpr Logger kLog("main");
@@ -87,6 +88,35 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
+  if (argc >= 2 && std::strcmp(argv[1], "outputs") == 0) {
+    WaylandClient client;
+    if (!client.connect()) {
+      std::fputs(
+          "error: connect to Wayland compositor first (e.g. just run-niri)\n",
+          stderr);
+      return 1;
+    }
+    wl_display *display = client.display();
+    if (wl_display_roundtrip(display) < 0 ||
+        wl_display_roundtrip(display) < 0) {
+      std::fputs("error: Wayland roundtrip failed\n", stderr);
+      return 1;
+    }
+    bool any = false;
+    for (const WaylandOutputInfo &output : client.outputs()) {
+      if (!output.done || output.name.empty()) {
+        continue;
+      }
+      std::printf("%s\n", output.name.c_str());
+      any = true;
+    }
+    if (!any) {
+      std::fputs("error: no named outputs found\n", stderr);
+      return 1;
+    }
+    return 0;
+  }
+
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--session") == 0 ||
         std::strcmp(argv[i], "--cmd") == 0) {
@@ -119,11 +149,13 @@ int main(int argc, char *argv[]) {
       std::puts(
           "Usage: noctalia-greeter [OPTIONS]\n"
           "       noctalia-greeter sessions\n"
+          "       noctalia-greeter outputs\n"
           "\n"
           "Run as a Wayland client under a compositor (e.g. cage).\n"
           "\n"
           "Commands:\n"
           "  sessions              List available session names and exit\n"
+          "  outputs               List Wayland connector names and exit\n"
           "\n"
           "Options:\n"
           "  -h, --help            Show this help message\n"

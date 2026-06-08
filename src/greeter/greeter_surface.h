@@ -59,9 +59,14 @@ public:
 
   void prepareFrame(bool needsUpdate, bool needsLayout);
 
+  void setOutputViewport(float x, float y, float width, float height);
+  void clearOutputViewport();
+
   [[nodiscard]] Node *sceneRoot() noexcept { return &m_root; }
 
 private:
+  [[nodiscard]] bool pointerInViewport(float x, float y) const;
+  void syncScaledTypography();
   void layoutScene(std::uint32_t width, std::uint32_t height);
   void tryAuthenticate();
   void onAuthSuccess();
@@ -117,7 +122,13 @@ private:
   InputDispatcher m_inputDispatcher;
 
   WallpaperNode *m_wallpaper = nullptr;
+  RectNode *m_letterbox = nullptr;
   Node *m_backdrop = nullptr;
+  float m_viewportX = 0.0f;
+  float m_viewportY = 0.0f;
+  float m_viewportWidth = 0.0f;
+  float m_viewportHeight = 0.0f;
+  bool m_outputViewportActive = false;
   Node *m_brandPane = nullptr;
   ImageNode *m_brandLogo = nullptr;
   Label *m_brandTitleLabel = nullptr;

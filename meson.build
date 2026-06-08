@@ -94,6 +94,7 @@ _greeter_sources = files(
   'src/core/resource_paths.cpp',
   'src/core/ui_phase.cpp',
   'src/wayland/wayland_client.cpp',
+  'src/wayland/display_scale.cpp',
   'src/wayland/wayland_seat.cpp',
   'src/render/gl_shared_context.cpp',
   'src/render/render_context.cpp',
@@ -149,6 +150,7 @@ _greeter_sources = files(
   'src/greeter/appearance_sync.cpp',
   'src/greeter/appearance_config.cpp',
   'src/greeter/greeter_preferences.cpp',
+  'src/greeter/output_layout.cpp',
   'src/greeter/greeter_sessions.cpp',
   'src/greeter/greeter_surface.cpp',
   'src/greeter/greeter_window.cpp',
@@ -215,6 +217,7 @@ install_data(
 install_data(
   [
     'scripts/greetd_setup_lib.sh',
+    'scripts/noctalia-greeter-cage-entry',
     'scripts/print_greetd_config.sh',
     'scripts/setup_greetd_pam.sh',
     'scripts/setup_greeter_system.sh',
