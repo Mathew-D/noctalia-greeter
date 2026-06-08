@@ -42,11 +42,25 @@ resolve_greeter_user() {
   echo "greeter"
 }
 
+greetd_service_command() {
+  if command -v systemctl >/dev/null 2>&1; then
+    echo "sudo systemctl enable --now greetd"
+    return 0
+  fi
+  if command -v sv >/dev/null 2>&1; then
+    echo "sudo sv restart greetd"
+    return 0
+  fi
+  echo "# enable and restart greetd using your init system"
+}
+
 print_greetd_config_commands() {
   local session_bin="$1"
   local greeter_user="$2"
+  local service_cmd
+  service_cmd="$(greetd_service_command)"
 
-  echo "Configure greetd - copy and paste the block below."
+  echo "Configure greetd — copy and paste the block below."
   echo "On an existing greetd setup this replaces config.toml (a .bak copy is made first)."
   echo ""
   cat <<EOF
@@ -62,10 +76,8 @@ command = "${session_bin}"
 user = "${greeter_user}"
 GREETD_CONFIG
 
-sudo systemctl enable --now greetd
+${service_cmd}
 EOF
-  echo ""
-  echo "On runit: sudo sv restart greetd"
   echo ""
   echo "Optional pinned desktop session (name must match the picker):"
   echo "  command = \"${session_bin} -- --session niri\""
