@@ -43,7 +43,7 @@ void emergencyAppend(const char *path, const char *text) {
   if (fd < 0) {
     return;
   }
-  ::write(fd, text, std::strlen(text));
+  (void)::write(fd, text, std::strlen(text));
   ::close(fd);
 }
 
@@ -174,7 +174,7 @@ void emergencyLogBootstrap(int argc, char *argv[]) {
   const std::string line = msg.str();
   const char *text = line.c_str();
 
-  ::write(STDERR_FILENO, text, line.size());
+  (void)::write(STDERR_FILENO, text, line.size());
 
   std::string uidLog =
       "/tmp/noctalia-greeter-" + std::to_string(::getuid()) + ".log";
