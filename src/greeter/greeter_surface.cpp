@@ -1044,22 +1044,14 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   rebuildFocusRing();
   applyMenuHighlight();
 
-  // Place initial keyboard focus on the last-used user so a returning user can
-  // type their password immediately. Done here because the user rows only have
-  // valid focus targets once the scene has been laid out.
-  if (!m_initialFocusDone && !m_passwordVisible && !m_focusRing.empty()) {
-    std::ptrdiff_t initial = 0;
-    for (std::size_t i = 0; i < m_focusRing.size(); ++i) {
-      if (m_selectedUser < m_userRowButtons.size() &&
-          m_userRowButtons[m_selectedUser] != nullptr &&
-          m_focusRing[i].area ==
-              m_userRowButtons[m_selectedUser]->inputArea()) {
-        initial = static_cast<std::ptrdiff_t>(i);
-        break;
-      }
-    }
-    setFocusIndex(initial);
+  // Keyboard focus is applied once the user rows have valid layout targets.
+  if (!m_initialFocusDone && !m_focusRing.empty()) {
+    setFocusIndex(defaultFocusIndex());
     m_initialFocusDone = true;
+  } else if (m_focusIndex < 0 && !m_focusRing.empty()) {
+    setFocusIndex(defaultFocusIndex());
+  } else {
+    syncFocusIndexFromFocused();
   }
 }
 
@@ -1872,6 +1864,38 @@ void GreeterSurface::layoutPanelSessionSelector(float x, float y, float w,
   m_sessionSelectArea->setSize(w, h);
 }
 
+std::ptrdiff_t GreeterSurface::defaultFocusIndex() const {
+  if (m_focusRing.empty()) {
+    return 0;
+  }
+
+  if (!m_passwordVisible) {
+    for (std::size_t i = 0; i < m_focusRing.size(); ++i) {
+      if (m_selectedUser < m_userRowButtons.size() &&
+          m_userRowButtons[m_selectedUser] != nullptr &&
+          m_focusRing[i].area ==
+              m_userRowButtons[m_selectedUser]->inputArea()) {
+        return static_cast<std::ptrdiff_t>(i);
+      }
+    }
+  }
+
+  return 0;
+}
+
+void GreeterSurface::syncFocusIndexFromFocused() {
+  InputArea *focused = InputArea::getFocused();
+  if (focused == nullptr) {
+    return;
+  }
+  for (std::size_t i = 0; i < m_focusRing.size(); ++i) {
+    if (m_focusRing[i].area == focused) {
+      m_focusIndex = static_cast<std::ptrdiff_t>(i);
+      return;
+    }
+  }
+}
+
 void GreeterSurface::setFocusIndex(std::ptrdiff_t index) {
   if (m_focusRing.empty()) {
     m_focusIndex = -1;
@@ -1888,11 +1912,25 @@ void GreeterSurface::moveFocus(int delta) {
   if (m_focusRing.empty()) {
     return;
   }
+  if (m_focusIndex < 0) {
+    syncFocusIndexFromFocused();
+  }
   const std::ptrdiff_t start = m_focusIndex < 0 ? 0 : m_focusIndex + delta;
   setFocusIndex(start);
 }
 
 void GreeterSurface::activateFocused() {
+  if (m_focusRing.empty()) {
+    return;
+  }
+  if (m_focusIndex < 0 ||
+      m_focusIndex >= static_cast<std::ptrdiff_t>(m_focusRing.size())) {
+    syncFocusIndexFromFocused();
+  }
+  if (m_focusIndex < 0 ||
+      m_focusIndex >= static_cast<std::ptrdiff_t>(m_focusRing.size())) {
+    setFocusIndex(defaultFocusIndex());
+  }
   if (m_focusIndex < 0 ||
       m_focusIndex >= static_cast<std::ptrdiff_t>(m_focusRing.size())) {
     return;
@@ -2086,6 +2124,9 @@ bool GreeterSurface::handleNavigationKey(std::uint32_t sym,
     return true;
   }
   if (KeySymbol::isEnter(sym) || KeySymbol::isSpace(sym)) {
+    if (InputArea::getFocused() == nullptr && !m_focusRing.empty()) {
+      setFocusIndex(defaultFocusIndex());
+    }
     activateFocused();
     return true;
   }

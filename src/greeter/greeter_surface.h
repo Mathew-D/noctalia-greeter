@@ -101,6 +101,8 @@ private:
   void layoutPanelSessionSelector(float x, float y, float w, float h);
   void commitImmediateFrame(bool layout);
   void setFocusIndex(std::ptrdiff_t index);
+  void syncFocusIndexFromFocused();
+  [[nodiscard]] std::ptrdiff_t defaultFocusIndex() const;
   void moveFocus(int delta);
   void activateFocused();
   [[nodiscard]] bool menuOpen() const noexcept;

@@ -1127,15 +1127,15 @@ int main(int argc, char **argv) {
     }
   }
 
-  int cursor_size = 24;
+  uint32_t cursor_size = 24;
   if (server.cursor_size > 0) {
-    cursor_size = server.cursor_size;
+    cursor_size = (uint32_t)server.cursor_size;
   } else {
     const char *env_size = getenv("XCURSOR_SIZE");
     if (env_size != NULL && env_size[0] != '\0') {
-      const int parsed = atoi(env_size);
-      if (parsed > 0) {
-        cursor_size = parsed;
+      const long parsed = strtol(env_size, NULL, 10);
+      if (parsed > 0 && parsed <= 1024) {
+        cursor_size = (uint32_t)parsed;
       }
     }
   }
