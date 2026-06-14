@@ -78,10 +78,8 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  greeter::GreeterPreferences prefs = greeter::loadGreeterPreferences();
-  prefs.scheme = greeter::appearance::kSyncedSchemeDisplayName;
-  if (!greeter::saveGreeterPreferences(prefs)) {
-    kLog.error("installed appearance but failed to set scheme in greeter.conf");
+  if (!greeter::appearance::applySyncedGreeterPreferences(stagingDirectory, error)) {
+    kLog.error("{}", error);
     return 1;
   }
 

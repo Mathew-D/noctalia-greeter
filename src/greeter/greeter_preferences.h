@@ -4,8 +4,15 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace greeter {
+
+  struct GreeterOutputPlacement {
+    std::string name;
+    int32_t x = 0;
+    int32_t y = 0;
+  };
 
   struct GreeterPreferences {
     std::optional<std::string> defaultSession;
@@ -21,6 +28,12 @@ namespace greeter {
 
   [[nodiscard]] GreeterPreferences loadGreeterPreferences();
   [[nodiscard]] bool saveGreeterPreferences(const GreeterPreferences& prefs);
+
+  // output_layout in greeter.conf: "NAME:X,Y; ..." (logical pixels, compositor + client).
+  [[nodiscard]] std::vector<GreeterOutputPlacement> loadGreeterOutputLayout();
+
+  // Sets scheme to Synced; updates output_layout only when stagedLayout is set.
+  [[nodiscard]] bool applyAppearanceSyncGreeterConf(const std::optional<std::string>& stagedOutputLayout);
 
   // greetd/CLI default (--session / --cmd); overrides greeter.conf
   // default_session.

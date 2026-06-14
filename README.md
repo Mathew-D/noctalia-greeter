@@ -180,6 +180,14 @@ output="DP-2"
 
 The compositor disables the other connectors at the KMS level when `output` is set. If `output` names a disconnected connector, the greeter falls back to mirroring on all outputs.
 
+When using multiple monitors, set `output_layout` manually or sync from Noctalia Shell (see Matching Noctalia Shell). Without it, outputs are placed left-to-right by connector name. List connector names with `noctalia-greeter outputs`:
+
+```ini
+output_layout="DP-1:0,0; HDMI-A-1:1920,0; DP-2:3840,0"
+```
+
+Monitors to the left of the origin can use negative X values. Outputs not listed are placed to the right of the configured layout with a warning in the compositor log.
+
 Test locally with:
 
 ```sh
@@ -224,7 +232,7 @@ Logs: `/var/log/noctalia-greeter.log` and `/var/lib/noctalia-greeter/greeter.log
 
 ## Matching Noctalia Shell
 
-With [Noctalia v5](https://github.com/noctalia-dev/noctalia) installed, open **Settings → Shell → Security → Noctalia Greeter → Sync Now**. The shell copies your wallpaper and palette to the greeter (you may be prompted for admin credentials). After syncing, log out or restart greetd to see the changes on the login screen.
+With [Noctalia v5](https://github.com/noctalia-dev/noctalia) installed, open **Settings → Shell → Security → Noctalia Greeter → Sync Now**. The shell copies your wallpaper, palette, and multi-monitor layout (when available) to the greeter (you may be prompted for admin credentials). After syncing, log out or restart greetd to see the changes on the login screen.
 
 The greeter adds a **Synced** color scheme when sync data is present. Session and scheme choices you make on the login screen are remembered in `/var/lib/noctalia-greeter/greeter.conf`.
 
@@ -234,6 +242,7 @@ Admin-only keys in `greeter.conf` (set by you, not the UI):
 - `default_user` - username to select on startup; opens the password step immediately (overrides user picker unless you go back; `--user` on the command line wins)
 - `greeter_user` - greetd account name (setup/logging)
 - `output` - Wayland connector name (see Multi-monitor)
+- `output_layout` - multi-monitor positions as `NAME:X,Y; ...` in logical pixels (see Multi-monitor)
 - `scale` - manual compositor scale factor (e.g. `1.5`); invalid or missing → auto scale
 - `cursor_theme` - cursor theme name (e.g. `Adwaita`); missing → wlroots default cursor
 - `cursor_size` - cursor size in pixels (e.g. `24`); missing → `24`

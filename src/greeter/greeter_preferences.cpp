@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cerrno>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -134,12 +135,12 @@ namespace {
     out << "# default_session: admin default (Wayland session Name=)\n";
     out << "# default_user: skip user picker, open password for this account\n";
     out << "# session: last used (UI); scheme: color scheme name\n";
-    out << "# output: Wayland connector; scale: UI scale; admin-only\n";
-    out << "# cursor_theme/cursor_size/cursor_path: cursor appearance; admin-only\n";
+    out << "# output: Wayland connector; output_layout: monitor positions; admin-only\n";
+    out << "# scale: UI scale; cursor_theme/cursor_size/cursor_path: cursor appearance\n";
 
     static constexpr const char* kPreferredOrder[] = {
-        "greeter_user", "default_session", "default_user", "session",     "scheme",
-        "output",       "scale",           "cursor_theme", "cursor_size", "cursor_path",
+        "greeter_user",  "default_session", "default_user", "session",     "scheme",      "output",
+        "output_layout", "scale",           "cursor_theme", "cursor_size", "cursor_path",
     };
     for (const char* key : kPreferredOrder) {
       const auto it = map.find(key);
@@ -191,6 +192,93 @@ namespace {
       return std::nullopt;
     }
     return scale;
+  }
+
+  [[nodiscard]] std::optional<greeter::GreeterOutputPlacement> parseOutputLayoutEntry(std::string_view token) {
+    const std::string trimmed = trim(token);
+    if (trimmed.empty()) {
+      return std::nullopt;
+    }
+
+    const std::size_t colon = trimmed.rfind(':');
+    if (colon == std::string_view::npos || colon == 0) {
+      return std::nullopt;
+    }
+
+    const std::string name = trim(trimmed.substr(0, colon));
+    const std::string coords = trim(trimmed.substr(colon + 1));
+    if (name.empty() || coords.empty()) {
+      return std::nullopt;
+    }
+
+    const std::size_t comma = coords.find(',');
+    if (comma == std::string_view::npos) {
+      return std::nullopt;
+    }
+
+    const std::string xRaw = trim(coords.substr(0, comma));
+    const std::string yRaw = trim(coords.substr(comma + 1));
+    if (xRaw.empty() || yRaw.empty()) {
+      return std::nullopt;
+    }
+
+    auto parseCoord = [](const std::string& raw) -> std::optional<int32_t> {
+      char* end = nullptr;
+      errno = 0;
+      const long value = std::strtol(raw.c_str(), &end, 10);
+      if (errno != 0 || end == raw.c_str() || *end != '\0') {
+        return std::nullopt;
+      }
+      if (value < INT32_MIN || value > INT32_MAX) {
+        return std::nullopt;
+      }
+      return static_cast<int32_t>(value);
+    };
+
+    const auto x = parseCoord(xRaw);
+    const auto y = parseCoord(yRaw);
+    if (!x.has_value() || !y.has_value()) {
+      return std::nullopt;
+    }
+
+    greeter::GreeterOutputPlacement placement;
+    placement.name = name;
+    placement.x = *x;
+    placement.y = *y;
+    return placement;
+  }
+
+  [[nodiscard]] std::vector<greeter::GreeterOutputPlacement> parseOutputLayoutValue(std::string_view raw) {
+    std::vector<greeter::GreeterOutputPlacement> placements;
+    std::string normalized;
+    normalized.reserve(raw.size());
+    for (const char ch : raw) {
+      normalized.push_back(ch == ';' ? ' ' : ch);
+    }
+
+    std::size_t begin = 0;
+    while (begin < normalized.size()) {
+      while (begin < normalized.size() && std::isspace(static_cast<unsigned char>(normalized[begin])) != 0) {
+        ++begin;
+      }
+      if (begin >= normalized.size()) {
+        break;
+      }
+
+      std::size_t end = begin;
+      while (end < normalized.size() && std::isspace(static_cast<unsigned char>(normalized[end])) == 0) {
+        ++end;
+      }
+
+      if (const auto placement = parseOutputLayoutEntry(normalized.substr(begin, end - begin))) {
+        placements.push_back(*placement);
+      } else {
+        kLog.warn("ignoring invalid output_layout entry '{}'", normalized.substr(begin, end - begin));
+      }
+      begin = end;
+    }
+
+    return placements;
   }
 
   [[nodiscard]] bool setPathMode(const std::filesystem::path& path, const mode_t mode, std::string& errorOut) {
@@ -255,14 +343,36 @@ namespace greeter {
     return std::nullopt;
   }
 
+  std::vector<GreeterOutputPlacement> loadGreeterOutputLayout() {
+    const KeyValueMap map = loadKeyValues(greeterConfPath());
+    const auto it = map.find("output_layout");
+    if (it == map.end() || it->second.empty()) {
+      return {};
+    }
+    return parseOutputLayoutValue(it->second);
+  }
+
+  bool applyAppearanceSyncGreeterConf(const std::optional<std::string>& stagedOutputLayout) {
+    KeyValueMap map = loadKeyValues(greeterConfPath());
+    map["scheme"] = appearance::kSyncedSchemeDisplayName;
+    if (stagedOutputLayout.has_value()) {
+      if (stagedOutputLayout->empty() || parseOutputLayoutValue(*stagedOutputLayout).empty()) {
+        kLog.warn("refusing to apply invalid staged output_layout");
+        return false;
+      }
+      map["output_layout"] = *stagedOutputLayout;
+    }
+    return writeKeyValues(greeterConfPath(), map);
+  }
+
   GreeterPreferences loadGreeterPreferences() {
     GreeterPreferences prefs;
     const auto path = greeterConfPath();
     const KeyValueMap map = loadKeyValues(path);
 
-    static constexpr std::array<std::string_view, 10> kKnownKeys = {
-        "greeter_user", "default_session", "default_user", "session",     "scheme",
-        "output",       "scale",           "cursor_theme", "cursor_size", "cursor_path",
+    static constexpr std::array<std::string_view, 11> kKnownKeys = {
+        "greeter_user",  "default_session", "default_user", "session",     "scheme",      "output",
+        "output_layout", "scale",           "cursor_theme", "cursor_size", "cursor_path",
     };
     for (const auto& [key, value] : map) {
       if (std::find(kKnownKeys.begin(), kKnownKeys.end(), std::string_view(key)) == kKnownKeys.end()) {

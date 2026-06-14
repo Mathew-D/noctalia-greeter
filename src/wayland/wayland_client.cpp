@@ -2,6 +2,7 @@
 
 #include "core/log.h"
 #include "fractional-scale-v1-client-protocol.h"
+#include "greeter/greeter_preferences.h"
 #include "viewporter-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -71,6 +72,26 @@ namespace {
       }
     }
     return readyCount > 1;
+  }
+
+  [[nodiscard]] int
+  outputLayoutIndex(const std::vector<greeter::GreeterOutputPlacement>& layout, std::string_view name) {
+    for (std::size_t i = 0; i < layout.size(); ++i) {
+      if (layout[i].name == name) {
+        return static_cast<int>(i);
+      }
+    }
+    return -1;
+  }
+
+  [[nodiscard]] const greeter::GreeterOutputPlacement*
+  findOutputPlacement(const std::vector<greeter::GreeterOutputPlacement>& layout, std::string_view name) {
+    for (const auto& placement : layout) {
+      if (placement.name == name) {
+        return &placement;
+      }
+    }
+    return nullptr;
   }
 
   [[nodiscard]] std::size_t readyOutputCount(const std::vector<WaylandOutputInfo>& outputs) {
@@ -150,6 +171,8 @@ bool WaylandClient::connect() {
   if (m_display != nullptr) {
     return true;
   }
+
+  m_outputLayout = greeter::loadGreeterOutputLayout();
 
   constexpr int kMaxConnectAttempts = 60; // ~3s total with 50ms backoff
   for (int attempt = 1; attempt <= kMaxConnectAttempts; ++attempt) {
@@ -406,7 +429,20 @@ std::vector<const WaylandOutputInfo*> WaylandClient::readyOutputsSorted() const 
       ready.push_back(&out);
     }
   }
-  std::sort(ready.begin(), ready.end(), [](const WaylandOutputInfo* lhs, const WaylandOutputInfo* rhs) {
+  std::sort(ready.begin(), ready.end(), [this](const WaylandOutputInfo* lhs, const WaylandOutputInfo* rhs) {
+    if (!m_outputLayout.empty()) {
+      const int leftIndex = outputLayoutIndex(m_outputLayout, lhs->name);
+      const int rightIndex = outputLayoutIndex(m_outputLayout, rhs->name);
+      if (leftIndex >= 0 && rightIndex >= 0) {
+        return leftIndex < rightIndex;
+      }
+      if (leftIndex >= 0) {
+        return true;
+      }
+      if (rightIndex >= 0) {
+        return false;
+      }
+    }
     return lhs->name < rhs->name;
   });
   return ready;
@@ -436,7 +472,14 @@ std::optional<WaylandOutputLayout> WaylandClient::layoutForOutput(const WaylandO
 
   int32_t x = output.x;
   int32_t y = output.y;
-  if (allReadyOutputsShareOrigin(m_outputs)) {
+  if (const greeter::GreeterOutputPlacement* configured = findOutputPlacement(m_outputLayout, output.name)) {
+    x = configured->x;
+    y = configured->y;
+    kLog.info(
+        "output '{}' configured layout at ({},{}) {}x{}", output.name.empty() ? "?" : output.name.c_str(), x, y,
+        logical->first, logical->second
+    );
+  } else if (allReadyOutputsShareOrigin(m_outputs)) {
     std::vector<const WaylandOutputInfo*> ordered;
     ordered.reserve(m_outputs.size());
     for (const auto& candidate : m_outputs) {

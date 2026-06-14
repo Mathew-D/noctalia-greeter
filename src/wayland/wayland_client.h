@@ -1,5 +1,6 @@
 #pragma once
 
+#include "greeter/greeter_preferences.h"
 #include "wayland/wayland_seat.h"
 
 #include <cstdint>
@@ -132,5 +133,6 @@ private:
   wp_viewporter* m_viewporter = nullptr;
   WaylandSeat m_seatHandler;
   std::vector<WaylandOutputInfo> m_outputs;
+  std::vector<greeter::GreeterOutputPlacement> m_outputLayout;
   std::function<void()> m_outputsChangedCallback;
 };

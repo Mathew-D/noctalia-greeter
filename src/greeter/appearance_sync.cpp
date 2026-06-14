@@ -1,5 +1,8 @@
 #include "greeter/appearance_sync.h"
 
+#include "greeter/greeter_preferences.h"
+
+#include <cctype>
 #include <cerrno>
 #include <cstring>
 #include <fstream>
@@ -242,6 +245,43 @@ namespace greeter::appearance {
       }
     }
 
+    return true;
+  }
+
+  bool applySyncedGreeterPreferences(const std::filesystem::path& stagingDirectory, std::string& errorOut) {
+    std::optional<std::string> stagedOutputLayout;
+    const auto layoutPath = stagingDirectory / kOutputLayoutFileName;
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(layoutPath, ec) && !ec) {
+      std::ifstream in(layoutPath);
+      if (!in.is_open()) {
+        errorOut = std::string("failed to open staged '") + layoutPath.string() + "'";
+        return false;
+      }
+      std::string raw((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+      while (!raw.empty() && (raw.back() == '\n' || raw.back() == '\r')) {
+        raw.pop_back();
+      }
+      std::size_t begin = 0;
+      while (begin < raw.size() && std::isspace(static_cast<unsigned char>(raw[begin])) != 0) {
+        ++begin;
+      }
+      std::size_t end = raw.size();
+      while (end > begin && std::isspace(static_cast<unsigned char>(raw[end - 1])) != 0) {
+        --end;
+      }
+      const std::string trimmed = raw.substr(begin, end - begin);
+      if (trimmed.empty()) {
+        errorOut = "staged output_layout is empty";
+        return false;
+      }
+      stagedOutputLayout = trimmed;
+    }
+
+    if (!greeter::applyAppearanceSyncGreeterConf(stagedOutputLayout)) {
+      errorOut = "failed to update greeter.conf after appearance sync";
+      return false;
+    }
     return true;
   }
 
