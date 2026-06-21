@@ -180,32 +180,6 @@ namespace {
     return std::nullopt;
   }
 
-  [[nodiscard]] std::optional<bool> parseBoolValue(std::string_view raw) {
-    const std::string value = trim(raw);
-    if (value.empty()) {
-      return std::nullopt;
-    }
-    if (value == "1"
-        || value == "true"
-        || value == "True"
-        || value == "TRUE"
-        || value == "yes"
-        || value == "Yes"
-        || value == "YES") {
-      return true;
-    }
-    if (value == "0"
-        || value == "false"
-        || value == "False"
-        || value == "FALSE"
-        || value == "no"
-        || value == "No"
-        || value == "NO") {
-      return false;
-    }
-    return std::nullopt;
-  }
-
   [[nodiscard]] std::optional<float> parseScaleValue(std::string_view raw) {
     const std::string value = trim(raw);
     if (value.empty()) {
