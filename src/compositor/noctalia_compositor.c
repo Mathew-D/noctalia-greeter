@@ -813,23 +813,8 @@ static void schedule_launch(struct greeter_server* server) {
   }
 
   if (use_all_outputs(server)) {
-    if (!all_outputs_active(server)) {
-      if (server->output_retries_left > 0) {
-        server->output_retries_left--;
-        struct wl_event_loop* loop = wl_display_get_event_loop(server->display);
-        if (server->launch_timer != NULL) {
-          wl_event_source_timer_update(server->launch_timer, 100);
-          return;
-        }
-        server->launch_timer = wl_event_loop_add_timer(loop, launch_timer_fired, server);
-        if (server->launch_timer != NULL) {
-          wl_event_source_timer_update(server->launch_timer, 100);
-        }
-        return;
-      }
-      if (!any_output_active(server)) {
-        return;
-      }
+    if (!all_outputs_active(server) && !any_output_active(server)) {
+      return;
     }
   } else if (!any_output_active(server)) {
     return;
@@ -1273,11 +1258,8 @@ static void try_launch_greeter(void* data) {
   }
   if (use_all_outputs(server)) {
     if (!all_outputs_active(server)) {
-      if (server->output_retries_left > 0) {
-        schedule_launch(server);
-        return;
-      }
       if (!any_output_active(server)) {
+        schedule_launch(server);
         return;
       }
     }
