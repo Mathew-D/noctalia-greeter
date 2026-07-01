@@ -1247,6 +1247,7 @@ void GreeterSurface::tryAuthenticate() {
     m_pendingResponse = m_password;
     m_hasPendingResponse = true;
     m_authenticating = true;
+    kLog.info("greetd: create_session for '{}'", m_username);
     if (!m_greetdClient->requestCreateSession(m_username)) {
       onAuthError(m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"}));
       return;
@@ -1269,6 +1270,7 @@ void GreeterSurface::onGreetdReadable() {
     const std::optional<GreetdResponse> response = m_greetdClient->readMessage();
     if (!response.has_value()) {
       if (const auto error = m_greetdClient->lastError()) {
+        kLog.warn("greetd connection lost: {}", error->description);
         // Drop the dead fd so it leaves the poll set instead of spinning on POLLHUP.
         m_greetdClient->disconnect();
         onAuthError(*error);
@@ -1285,6 +1287,15 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
   }
   const AuthRequest expected = m_pendingReplies.front();
   m_pendingReplies.pop_front();
+
+  const char* reqName = expected == AuthRequest::CreateSession ? "create_session"
+      : expected == AuthRequest::PostAuthData                  ? "post_auth_data"
+      : expected == AuthRequest::StartSession                  ? "start_session"
+                                                               : "cancel_session";
+  const char* respName = response.type == GreetdResponseType::AuthMessage ? "auth_message"
+      : response.type == GreetdResponseType::Error                        ? "error"
+                                                                          : "success";
+  kLog.debug("greetd reply to {}: {}", reqName, respName);
 
   // A cancel ack is no longer relevant.
   if (expected == AuthRequest::Cancel) {
@@ -1313,6 +1324,12 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
 }
 
 void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
+  const char* typeName = message.type == GreetdAuthMessageType::Secret ? "secret"
+      : message.type == GreetdAuthMessageType::Visible                 ? "visible"
+      : message.type == GreetdAuthMessageType::Error                   ? "error"
+                                                                       : "info";
+  kLog.info("PAM {} message: {}", typeName, message.message);
+
   if (message.type == GreetdAuthMessageType::Info || message.type == GreetdAuthMessageType::Error) {
     const bool isError = message.type == GreetdAuthMessageType::Error;
     if (!message.message.empty()) {
@@ -1351,6 +1368,7 @@ void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
 }
 
 void GreeterSurface::postAuthResponse(const std::string& data) {
+  kLog.debug("greetd: post_auth_data ({} bytes)", data.size());
   if (!m_greetdClient->requestPostAuthData(data)) {
     onAuthError(m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"}));
     return;
