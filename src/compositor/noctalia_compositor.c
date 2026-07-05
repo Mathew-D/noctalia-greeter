@@ -1055,6 +1055,22 @@ static void configure_libinput_touchpad(struct wlr_input_device* device) {
   wlr_log(WLR_INFO, "touchpad: enabled tap-to-click for %s", device->name);
 }
 
+static void configure_libinput_pointer(struct wlr_input_device* device) {
+  if (!wlr_input_device_is_libinput(device)) {
+    return;
+  }
+
+  struct libinput_device* libinput_dev = wlr_libinput_get_device_handle(device);
+  if (libinput_dev == NULL) {
+    return;
+  }
+
+  if (libinput_device_config_accel_is_available(libinput_dev)) {
+    libinput_device_config_accel_set_profile(libinput_dev, LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT);
+    wlr_log(WLR_INFO, "pointer: disabled acceleration for %s", device->name);
+  }
+}
+
 static void add_keyboard(struct greeter_server* server, struct wlr_input_device* device) {
   struct greeter_keyboard* keyboard = calloc(1, sizeof(*keyboard));
   if (keyboard == NULL) {
@@ -1106,6 +1122,7 @@ static void handle_new_input(struct wl_listener* listener, void* data) {
     break;
   case WLR_INPUT_DEVICE_POINTER:
     configure_libinput_touchpad(device);
+    configure_libinput_pointer(device);
     wlr_cursor_attach_input_device(server->cursor, device);
     caps |= WL_SEAT_CAPABILITY_POINTER;
     break;
