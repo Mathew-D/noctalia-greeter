@@ -50,6 +50,8 @@ public:
   void setContentScale(float scale);
   void setFontFamily(std::string family);
   void notifyFontConfigChanged();
+  // Drop uploaded glyph textures and re-rasterize on demand next draw.
+  void invalidateGlyphTextures();
 
   [[nodiscard]] TextMetrics measure(
       std::string_view text, float fontSize, bool bold = false, float maxWidth = 0.0f, int maxLines = 0,

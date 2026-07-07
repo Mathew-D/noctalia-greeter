@@ -28,7 +28,7 @@ public:
   void cleanup() override;
 
   void makeCurrent(RenderTarget& target) override;
-  void makeCurrentNoSurface() override;
+  bool makeCurrentNoSurface() override;
   void beginFrame(RenderTarget& target) override;
   void endFrame(RenderTarget& target) override;
 

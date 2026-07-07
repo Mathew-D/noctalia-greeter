@@ -143,6 +143,17 @@ void CairoGlyphRenderer::setContentScale(float scale) {
   }
 }
 
+void CairoGlyphRenderer::invalidateGlyphTextures() {
+  for (auto& [key, entry] : m_cache) {
+    if (m_textureManager != nullptr) {
+      m_textureManager->unload(entry.texture);
+    }
+  }
+  m_cache.clear();
+  m_lru.clear();
+  m_cacheBytes = 0;
+}
+
 void CairoGlyphRenderer::touch(CacheMap::iterator it) { m_lru.splice(m_lru.begin(), m_lru, it->second.lruIt); }
 
 void CairoGlyphRenderer::evict(CacheMap::iterator it) {

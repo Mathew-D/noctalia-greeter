@@ -29,6 +29,8 @@ public:
   void makeCurrent(RenderTarget& target);
   // Sync text/glyph scale to the target before measure/layout.
   void syncContentScale(RenderTarget& target);
+  // Drop uploaded glyph textures on the next frame so they are re-rasterized.
+  void invalidateGlyphTexturesNextFrame() noexcept { m_glyphTexturesDirty = true; }
   void setTextFontFamily(std::string family);
   void notifyFontConfigChanged() override;
 
@@ -51,7 +53,7 @@ public:
   [[nodiscard]] std::uint64_t textMetricsGeneration() const noexcept override { return m_textMetricsGeneration; }
 
 private:
-  void makeCurrentNoSurface();
+  bool makeCurrentNoSurface();
   void renderNode(
       const Node* node, const Mat3& parentTransform, float parentOpacity, float sw, float sh, float bw, float bh,
       float clipLeft, float clipTop, float clipRight, float clipBottom, bool hasClip
@@ -63,4 +65,5 @@ private:
   std::string m_textFontFamily = "sans-serif";
   float m_renderScale = 1.0f;
   std::uint64_t m_textMetricsGeneration = 1;
+  bool m_glyphTexturesDirty = false;
 };

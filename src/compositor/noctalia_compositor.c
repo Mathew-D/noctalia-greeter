@@ -545,6 +545,7 @@ static struct greeter_output* output_for_next_view(struct greeter_server* server
 }
 
 static void configure_view(struct greeter_view* view);
+static void choose_outputs(struct greeter_server* server);
 
 static void focus_view(struct greeter_view* view) {
   if (view == NULL || !view->mapped) {
@@ -591,7 +592,35 @@ static void handle_output_frame(struct wl_listener* listener, void* data) {
 static void handle_output_request_state(struct wl_listener* listener, void* data) {
   struct greeter_output* output = wl_container_of(listener, output, request_state);
   const struct wlr_output_event_request_state* event = data;
-  wlr_output_commit_state(output->wlr_output, event->state);
+  const bool was_enabled = output->wlr_output->enabled;
+  if (!wlr_output_commit_state(output->wlr_output, event->state)) {
+    wlr_log(WLR_ERROR, "failed to commit requested state for output %s", output->wlr_output->name);
+    return;
+  }
+
+  const bool is_enabled = output->wlr_output->enabled;
+  if (was_enabled != is_enabled) {
+    wlr_log(
+        WLR_INFO, "output %s state changed via request_state: %s -> %s", output->wlr_output->name,
+        was_enabled ? "enabled" : "disabled", is_enabled ? "enabled" : "disabled"
+    );
+  }
+
+  // Backend power-state transitions can flip enabled outside our explicit
+  // choose_outputs() path; keep runtime state in sync and rebuild layout.
+  if (!is_enabled && output->active) {
+    if (output->layout_output != NULL) {
+      wlr_output_layout_remove(output->server->output_layout, output->wlr_output);
+      output->layout_output = NULL;
+    }
+    if (output->scene_output != NULL) {
+      wlr_scene_output_destroy(output->scene_output);
+      output->scene_output = NULL;
+    }
+    output->active = false;
+  }
+
+  choose_outputs(output->server);
 }
 
 static void disable_output(struct greeter_output* output) {

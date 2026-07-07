@@ -41,6 +41,8 @@ public:
   void cleanup();
 
   void setContentScale(float scale);
+  // Drop uploaded icon glyph textures and re-rasterize on demand next draw.
+  void invalidateGlyphTextures();
 
   [[nodiscard]] TextMetrics measureGlyph(char32_t codepoint, float fontSize);
 

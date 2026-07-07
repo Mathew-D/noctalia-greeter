@@ -22,7 +22,8 @@ public:
 
   // Bind the root context surfacelessly. Handy when a GL resource has to be
   // created before any rendering surface exists.
-  void makeCurrentSurfaceless() const;
+  // Returns false if the context cannot be bound (for example after resume).
+  bool makeCurrentSurfaceless() const;
 
 private:
   EGLDisplay m_display = EGL_NO_DISPLAY;

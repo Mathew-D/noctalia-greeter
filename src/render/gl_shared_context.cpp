@@ -67,13 +67,19 @@ void GlSharedContext::initialize(wl_display* display) {
   kLog.info("initialized EGL {}.{} with shared root context", major, minor);
 }
 
-void GlSharedContext::makeCurrentSurfaceless() const {
+bool GlSharedContext::makeCurrentSurfaceless() const {
   if (m_display == EGL_NO_DISPLAY || m_rootContext == EGL_NO_CONTEXT) {
-    return;
+    return true;
   }
   if (eglMakeCurrent(m_display, EGL_NO_SURFACE, EGL_NO_SURFACE, m_rootContext) != EGL_TRUE) {
-    throw std::runtime_error("eglMakeCurrent (root, surfaceless) failed");
+    const EGLint error = eglGetError();
+    kLog.warn(
+        "eglMakeCurrent (root, surfaceless) failed (EGL error 0x{:04x}); skipping GPU work",
+        static_cast<unsigned>(error)
+    );
+    return false;
   }
+  return true;
 }
 
 void GlSharedContext::cleanup() {

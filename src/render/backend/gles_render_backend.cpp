@@ -196,7 +196,9 @@ void GlesRenderBackend::initialize(GlSharedContext& shared) {
   }
 
   // Make context current (surfaceless) so GL resources can be created eagerly.
-  makeCurrentNoSurface();
+  if (!makeCurrentNoSurface()) {
+    throw std::runtime_error("eglMakeCurrent(EGL_NO_SURFACE) failed during renderer initialization");
+  }
 
   if (!g_backendInfoLogged) {
     kLog.info(
@@ -213,14 +215,19 @@ void GlesRenderBackend::initialize(GlSharedContext& shared) {
   }
 }
 
-void GlesRenderBackend::makeCurrentNoSurface() {
+bool GlesRenderBackend::makeCurrentNoSurface() {
   if (m_display == EGL_NO_DISPLAY || m_context == EGL_NO_CONTEXT) {
-    return;
+    return false;
   }
 
   if (eglMakeCurrent(m_display, EGL_NO_SURFACE, EGL_NO_SURFACE, m_context) != EGL_TRUE) {
-    throw std::runtime_error("eglMakeCurrent(EGL_NO_SURFACE) failed");
+    const EGLint error = eglGetError();
+    kLog.warn(
+        "eglMakeCurrent(EGL_NO_SURFACE) failed (EGL error 0x{:04x}); skipping GPU work", static_cast<unsigned>(error)
+    );
+    return false;
   }
+  return true;
 }
 
 void GlesRenderBackend::makeCurrent(RenderTarget& target) {

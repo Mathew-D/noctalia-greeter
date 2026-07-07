@@ -104,11 +104,11 @@ void RenderContext::initialize(GlSharedContext& shared) {
   ++m_textMetricsGeneration;
 }
 
-void RenderContext::makeCurrentNoSurface() {
+bool RenderContext::makeCurrentNoSurface() {
   if (m_backend == nullptr) {
-    return;
+    return false;
   }
-  m_backend->makeCurrentNoSurface();
+  return m_backend->makeCurrentNoSurface();
 }
 
 void RenderContext::makeCurrent(RenderTarget& target) {
@@ -136,7 +136,10 @@ void RenderContext::setTextFontFamily(std::string family) {
   if (m_textFontFamily == family) {
     return;
   }
-  makeCurrentNoSurface();
+  if (!makeCurrentNoSurface()) {
+    kLog.warn("skipping font family update: failed to bind render context");
+    return;
+  }
   m_textFontFamily = std::move(family);
   m_textRenderer.setFontFamily(m_textFontFamily);
   ++m_textMetricsGeneration;
@@ -153,26 +156,39 @@ void RenderContext::renderScene(RenderTarget& target, Node* sceneRoot) {
     return;
   }
   const auto totalStart = std::chrono::steady_clock::now();
-  m_backend->beginFrame(target);
-  syncContentScale(target);
+  try {
+    m_backend->beginFrame(target);
+    syncContentScale(target);
 
-  const auto drawStart = std::chrono::steady_clock::now();
-  if (sceneRoot != nullptr) {
-    const auto sw = static_cast<float>(target.logicalWidth());
-    const auto sh = static_cast<float>(target.logicalHeight());
-    const auto bw = static_cast<float>(target.bufferWidth());
-    const auto bh = static_cast<float>(target.bufferHeight());
-    renderNode(sceneRoot, Mat3::identity(), 1.0f, sw, sh, bw, bh, 0.0f, 0.0f, sw, sh, false);
+    if (m_glyphTexturesDirty) {
+      m_textRenderer.invalidateGlyphTextures();
+      m_glyphRenderer.invalidateGlyphTextures();
+      m_glyphTexturesDirty = false;
+    }
+
+    const auto drawStart = std::chrono::steady_clock::now();
+    if (sceneRoot != nullptr) {
+      const auto sw = static_cast<float>(target.logicalWidth());
+      const auto sh = static_cast<float>(target.logicalHeight());
+      const auto bw = static_cast<float>(target.bufferWidth());
+      const auto bh = static_cast<float>(target.bufferHeight());
+      renderNode(sceneRoot, Mat3::identity(), 1.0f, sw, sh, bw, bh, 0.0f, 0.0f, sw, sh, false);
+    }
+    float ms = elapsedSince(drawStart);
+    logSlowRenderOperation(
+        ms, "scene draw took {:.1f}ms ({}x{} logical, {}x{} buffer)", ms, target.logicalWidth(), target.logicalHeight(),
+        target.bufferWidth(), target.bufferHeight()
+    );
+
+    m_backend->endFrame(target);
+    ms = elapsedSince(totalStart);
+    logSlowRenderOperation(ms, "renderScene took {:.1f}ms total", ms);
+  } catch (const std::exception& e) {
+    // Driver/context glitches can happen across suspend/resume. Keep the
+    // greeter alive and rebuild glyph textures once rendering is healthy.
+    kLog.warn("renderScene failed: {}", e.what());
+    m_glyphTexturesDirty = true;
   }
-  float ms = elapsedSince(drawStart);
-  logSlowRenderOperation(
-      ms, "scene draw took {:.1f}ms ({}x{} logical, {}x{} buffer)", ms, target.logicalWidth(), target.logicalHeight(),
-      target.bufferWidth(), target.bufferHeight()
-  );
-
-  m_backend->endFrame(target);
-  ms = elapsedSince(totalStart);
-  logSlowRenderOperation(ms, "renderScene took {:.1f}ms total", ms);
 }
 
 TextMetrics RenderContext::measureText(
@@ -231,7 +247,9 @@ TextMetrics RenderContext::measureGlyph(char32_t codepoint, float fontSize) {
 }
 
 TextureManager& RenderContext::textureManager() {
-  makeCurrentNoSurface();
+  if (!makeCurrentNoSurface()) {
+    kLog.warn("texture manager requested without a current render context");
+  }
   return m_backend->textureManager();
 }
 

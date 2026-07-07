@@ -102,7 +102,7 @@ public:
   virtual void cleanup() = 0;
 
   virtual void makeCurrent(RenderTarget& target) = 0;
-  virtual void makeCurrentNoSurface() = 0;
+  virtual bool makeCurrentNoSurface() = 0;
   virtual void beginFrame(RenderTarget& target) = 0;
   virtual void endFrame(RenderTarget& target) = 0;
 
