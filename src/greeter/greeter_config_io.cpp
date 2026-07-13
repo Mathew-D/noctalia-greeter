@@ -35,7 +35,7 @@ namespace {
   }
 
   [[nodiscard]] bool isKnownOutputKey(std::string_view key) {
-    return key == "name" || key == "layout" || key == "scale";
+    return key == "name" || key == "layout" || key == "scale" || key == "width" || key == "height";
   }
 
   [[nodiscard]] bool isKnownCursorKey(std::string_view key) { return key == "theme" || key == "size" || key == "path"; }
@@ -69,6 +69,15 @@ namespace {
   [[nodiscard]] std::optional<int> cursorSizeValue(const toml::node& node) {
     if (const auto value = node.value<int64_t>()) {
       if (*value > 0 && *value <= 1024) {
+        return static_cast<int>(*value);
+      }
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] std::optional<int> modeDimensionValue(const toml::node& node) {
+    if (const auto value = node.value<int64_t>()) {
+      if (*value > 0 && *value <= 16384) {
         return static_cast<int>(*value);
       }
     }
@@ -144,10 +153,24 @@ namespace {
             config.outputName = stringValue(entryNode);
           } else if (entryView == "layout") {
             config.outputLayout = stringValue(entryNode);
-          } else if (const auto scale = positiveFloatValue(entryNode)) {
-            config.outputScale = *scale;
-          } else {
-            kLog.warn("{}: invalid output.scale value", path.string());
+          } else if (entryView == "scale") {
+            if (const auto scale = positiveFloatValue(entryNode)) {
+              config.outputScale = *scale;
+            } else {
+              kLog.warn("{}: invalid output.scale value", path.string());
+            }
+          } else if (entryView == "width") {
+            if (const auto width = modeDimensionValue(entryNode)) {
+              config.outputModeWidth = *width;
+            } else {
+              kLog.warn("{}: invalid output.width value", path.string());
+            }
+          } else if (entryView == "height") {
+            if (const auto height = modeDimensionValue(entryNode)) {
+              config.outputModeHeight = *height;
+            } else {
+              kLog.warn("{}: invalid output.height value", path.string());
+            }
           }
         } else if (keyView == "cursor") {
           if (!isKnownCursorKey(entryView)) {
@@ -369,7 +392,8 @@ namespace greeter::config {
     std::ostringstream out;
     out << "# noctalia-greeter greeter.toml\n";
     out << "# [session] default/last, [user] default, [appearance] scheme/password_style/hide_logo\n";
-    out << "# [output] name/layout/scale, [cursor] theme/size/path, [keyboard] layout/variant/options/numlock\n";
+    out << "# [output] name/layout/scale/width/height, [cursor] theme/size/path\n";
+    out << "# [keyboard] layout/variant/options/numlock\n";
     out << "# [auth] allow_empty_password (bool, default false; enables fingerprint/smartcard PAM auth)\n";
     out << '\n';
     out << formatToml(table);
@@ -414,6 +438,12 @@ extern "C" void greeter_compositor_config_load(const char* state_dir, struct gre
 
   if (config.outputScale.has_value() && *config.outputScale >= 1.0f) {
     out->manual_scale = *config.outputScale;
+  }
+  if (config.outputModeWidth.has_value() && *config.outputModeWidth > 0) {
+    out->manual_mode_width = *config.outputModeWidth;
+  }
+  if (config.outputModeHeight.has_value() && *config.outputModeHeight > 0) {
+    out->manual_mode_height = *config.outputModeHeight;
   }
   if (config.cursorSize.has_value() && *config.cursorSize > 0) {
     out->cursor_size = *config.cursorSize;
